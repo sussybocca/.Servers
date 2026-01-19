@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import Head from 'next/head';
 import { motion, AnimatePresence } from 'framer-motion';
-import Particles from 'react-tsparticles';
+import Particles from 'tsparticles/react';
 import { loadSlim } from 'tsparticles-slim';
 import Tilt from 'react-parallax-tilt';
 
