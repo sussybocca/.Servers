@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Head from 'next/head';
 
 export default function EditorPage() {
@@ -9,10 +9,36 @@ export default function EditorPage() {
   const [isPublic, setIsPublic] = useState(true);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
+  const [currentUser, setCurrentUser] = useState(null);
+
+  // Get current user on component mount
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const response = await fetch('/api/check-session');
+        const data = await response.json();
+        if (data.user) {
+          setCurrentUser(data.user);
+        } else {
+          // Not logged in, redirect to login
+          window.location.href = '/login';
+        }
+      } catch (error) {
+        console.error('Failed to fetch user:', error);
+      }
+    };
+    fetchUser();
+  }, []);
 
   const createServer = async () => {
     if (!serverName.trim()) {
       setMessage('Server name is required');
+      return;
+    }
+
+    if (!currentUser) {
+      setMessage('You must be logged in to create a server');
+      window.location.href = '/login';
       return;
     }
 
@@ -26,27 +52,48 @@ export default function EditorPage() {
         body: JSON.stringify({
           name: serverName,
           description,
-          is_public: isPublic
+          userId: currentUser.id, // ⬅️ ADD THIS - REQUIRED!
+          privacy: isPublic ? 'public' : 'private' // Match API param name
         })
       });
 
       const data = await response.json();
 
       if (data.success) {
-        setMessage('Server created successfully!');
+        setMessage('Server created successfully! Redirecting...');
+        
+        // Debug log
+        console.log('Server created:', data.server);
+        
         // Redirect to editor for that server
         setTimeout(() => {
-          window.location.href = `/editor/${data.server.id}`;
+          if (data.server && data.server.id) {
+            window.location.href = `/editor/${data.server.id}`;
+          } else {
+            setMessage('Error: No server ID returned');
+            setLoading(false);
+          }
         }, 1500);
       } else {
         setMessage(data.error || 'Failed to create server');
+        console.error('API Error:', data);
       }
     } catch (error) {
-      setMessage('Network error');
+      setMessage('Network error: ' + error.message);
+      console.error('Network Error:', error);
     } finally {
       setLoading(false);
     }
   };
+
+  // Show loading while checking auth
+  if (!currentUser) {
+    return (
+      <div style={styles.loadingContainer}>
+        <div style={styles.loadingText}>Checking authentication...</div>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -59,6 +106,9 @@ export default function EditorPage() {
             Server.x
           </div>
           <div style={styles.nav}>
+            <div style={styles.userInfo}>
+              <span style={styles.username}>Hello, {currentUser.username || 'User'}</span>
+            </div>
             <button 
               style={styles.backButton}
               onClick={() => window.location.href = '/explore'}
@@ -82,6 +132,7 @@ export default function EditorPage() {
                   style={styles.input}
                   placeholder="My Awesome Server"
                   maxLength={50}
+                  disabled={loading}
                 />
               </div>
 
@@ -94,6 +145,7 @@ export default function EditorPage() {
                   placeholder="Describe your server..."
                   rows={4}
                   maxLength={500}
+                  disabled={loading}
                 />
               </div>
 
@@ -104,6 +156,7 @@ export default function EditorPage() {
                     checked={isPublic}
                     onChange={(e) => setIsPublic(e.target.checked)}
                     style={styles.checkbox}
+                    disabled={loading}
                   />
                   Make server public (visible to everyone)
                 </label>
@@ -123,7 +176,7 @@ export default function EditorPage() {
               <button
                 style={styles.createButton}
                 onClick={createServer}
-                disabled={loading || !serverName.trim()}
+                disabled={loading || !serverName.trim() || !currentUser}
               >
                 {loading ? 'Creating...' : 'Create Server & Open Editor'}
               </button>
@@ -168,7 +221,15 @@ const styles = {
   },
   nav: {
     display: 'flex',
+    alignItems: 'center',
     gap: 20
+  },
+  userInfo: {
+    color: '#ccc',
+    fontSize: 14
+  },
+  username: {
+    marginRight: 10
   },
   backButton: {
     backgroundColor: '#666',
@@ -279,5 +340,16 @@ const styles = {
     paddingLeft: 20,
     lineHeight: 1.8,
     color: '#555'
+  },
+  loadingContainer: {
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    minHeight: '100vh',
+    backgroundColor: '#f0f2f5'
+  },
+  loadingText: {
+    fontSize: 18,
+    color: '#666'
   }
 };
