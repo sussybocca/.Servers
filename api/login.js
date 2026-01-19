@@ -7,7 +7,7 @@ import nodemailer from 'nodemailer';
 // Initialize Supabase client
 const supabase = createClient(
   process.env.SUPABASE_URL, 
-  process.env.SUPABASE_KEY || process.env.SUPABASE_KEY,
+  process.env.SUPABASE_ANON_KEY,
   {
     auth: {
       persistSession: false
@@ -48,26 +48,6 @@ async function logAttempt(key) {
   const attempts = rateLimitCache.get(key) || [];
   attempts.push(Date.now());
   rateLimitCache.set(key, attempts);
-}
-
-// Verify CAPTCHA
-async function verifyCaptcha(token, ip) {
-  if (!token) return false;
-  const secret = process.env.CAPTCHA_SECRET_KEY;
-
-  try {
-    const res = await fetch('https://hcaptcha.com/siteverify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: `secret=${secret}&response=${token}&remoteip=${ip}`
-    });
-
-    const data = await res.json();
-    return data.success === true;
-  } catch (err) {
-    console.error('CAPTCHA ERROR:', err);
-    return false;
-  }
 }
 
 // Device fingerprint hash
@@ -170,8 +150,6 @@ export default async function handler(req, res) {
       email,
       password,
       remember_me,
-      captcha_token,
-      google,
       fingerprint,
       verification_code
     } = body;
@@ -181,14 +159,6 @@ export default async function handler(req, res) {
     }
 
     const ip = req.headers['x-forwarded-for'] || req.headers['client-ip'] || req.socket?.remoteAddress || 'unknown';
-
-    // Google login - update path for Vercel
-    if (google) {
-      return res.status(200).json({ 
-        success: true, 
-        redirect: '/api/auth/google' 
-      });
-    }
 
     // Rate limit check
     const allowed = await checkRateLimit(ip + email);
@@ -274,19 +244,6 @@ export default async function handler(req, res) {
     }
 
     const deviceFingerprint = getDeviceFingerprint(req.headers, fingerprint);
-
-    // CAPTCHA check for first login attempt
-    if (!verification_code) {
-      const captchaOk = await verifyCaptcha(captcha_token, ip);
-      if (!captchaOk) {
-        await logAttempt(ip + email);
-        await randomDelay();
-        return res.status(403).json({ 
-          success: false, 
-          error: 'CAPTCHA verification failed. Please try again.' 
-        });
-      }
-    }
 
     // ZERO TRUST: email verification required
     if (!verification_code) {
