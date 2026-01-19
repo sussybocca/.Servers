@@ -149,16 +149,16 @@ export default function WindowsLogin() {
     setError('');
 
     try {
-      const response = await fetch('/api/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email,
-          password,
-          captcha_token: 'bypass-for-now' // Temporary bypass
-        })
-      });
-
+      
+// To this:
+const response = await fetch('/api/login', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    email,
+    password
+  })
+});
       const data = await response.json();
 
       if (data.verification_required) {
