@@ -13,6 +13,14 @@ export default async function handler(req, res) {
   try {
     const { name, description, userId, privacy = 'public' } = req.body;
     
+    // Validate required fields
+    if (!name || !userId) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Server name and user ID are required' 
+      });
+    }
+    
     // Create server in database
     const { data: server, error } = await supabase
       .from('servers')
@@ -29,12 +37,31 @@ export default async function handler(req, res) {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error('Database error:', error);
+      return res.status(500).json({ 
+        success: false, 
+        error: 'Database error: ' + error.message 
+      });
+    }
 
-    res.status(200).json({ server });
+    // ✅ RETURN THE FORMAT YOUR FRONTEND EXPECTS
+    res.status(200).json({ 
+      success: true, 
+      server: {
+        id: server.id,        // Your frontend needs this for redirect
+        name: server.name,
+        description: server.description,
+        created_at: server.created_at
+      }
+    });
+    
   } catch (error) {
     console.error('Error creating server:', error);
-    res.status(500).json({ error: 'Failed to create server' });
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to create server: ' + error.message 
+    });
   }
 }
 
