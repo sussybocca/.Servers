@@ -24,8 +24,10 @@ import {
 import Tilt from 'vanilla-tilt';
 import dynamic from 'next/dynamic';
 
-// Dynamic import for performance
-const Particles = dynamic(() => import('react-tsparticles'), { ssr: false });
+
+import { useCallback } from 'react';
+import Particles from "@tsparticles/react";
+import { loadSlim } from "@tsparticles/slim";
 
 export default function WindowsLogin() {
   const [email, setEmail] = useState('');
@@ -213,34 +215,57 @@ export default function WindowsLogin() {
     }
   };
 
-  const particlesInit = async (engine) => {
-    setParticlesLoaded(true);
-  };
-
-  const particlesConfig = {
-    fpsLimit: 30,
-    particles: {
-      number: { value: 30, density: { enable: true, value_area: 800 } },
-      color: { value: "#ffffff" },
-      shape: { type: "circle" },
-      opacity: { value: 0.3, random: true },
-      size: { value: 3, random: true },
-      move: { 
+ const particlesInit = useCallback(async (engine) => {
+  await loadSlim(engine);
+  setParticlesLoaded(true);
+}, []);
+const particlesConfig = {
+  fpsLimit: 30,
+  particles: {
+    number: { 
+      value: 30, 
+      density: { 
         enable: true, 
-        speed: 1, 
-        direction: "none",
-        random: true,
-        out_mode: "out"
-      }
+        value_area: 800 
+      } 
     },
-    interactivity: {
-      events: {
-        onhover: { enable: true, mode: "repulse" },
-        onclick: { enable: true, mode: "push" }
+    color: { 
+      value: "#ffffff" 
+    },
+    shape: { 
+      type: "circle" 
+    },
+    opacity: { 
+      value: 0.3, 
+      random: true 
+    },
+    size: { 
+      value: 3, 
+      random: true 
+    },
+    move: { 
+      enable: true, 
+      speed: 1,
+      direction: "none",
+      random: true,
+      outModes: {
+        default: "out"
       }
     }
-  };
-
+  },
+  interactivity: {
+    events: {
+      onHover: {
+        enable: true,
+        mode: "repulse"
+      },
+      onClick: {
+        enable: true,
+        mode: "push"
+      }
+    }
+  }
+};
   return (
     <>
       <Head>
@@ -344,21 +369,19 @@ export default function WindowsLogin() {
       </Head>
 
       {/* Background Particles */}
-      {particlesLoaded && (
-        <Particles
-          id="tsparticles"
-          init={particlesInit}
-          options={particlesConfig}
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: '100%',
-            zIndex: 0
-          }}
-        />
-      )}
+     <Particles
+  id="tsparticles"
+  init={particlesInit}
+  options={particlesConfig}
+  style={{
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    zIndex: 0
+  }}
+/>
 
       {/* System Tray */}
       <div style={styles.systemTray}>
