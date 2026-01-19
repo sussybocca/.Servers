@@ -63,7 +63,7 @@ export default function EditorPage() {
         setFiles(data.files || []);
         setFolders(data.folders || []);
         // Load server info
-        const serverRes = await fetch(`/api/get-servers?serverId=${serverId}`);
+        const serverRes = await fetch(`/api/get-server?serverId=${serverId}`);
         const serverData = await serverRes.json();
         if (serverData.success) {
           setServerName(serverData.server.name);
