@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Server.x - Host Your Mini Websites</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 0;
+            margin-bottom: 60px;
+        }
+
+        .logo {
+            font-size: 32px;
+            font-weight: 800;
+            color: white;
+            text-decoration: none;
+        }
+
+        .logo span {
+            color: #63b3ed;
+        }
+
+        .nav {
+            display: flex;
+            gap: 20px;
+        }
+
+        .nav-button {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+            text-decoration: none;
+            transition: all 0.3s;
+        }
+
+        .nav-button:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+        }
+
+        .nav-button.primary {
+            background: #4299e1;
+            border-color: #4299e1;
+        }
+
+        .nav-button.primary:hover {
+            background: #3182ce;
+        }
+
+        .hero {
+            text-align: center;
+            padding: 80px 0;
+            margin-bottom: 80px;
+        }
+
+        .hero h1 {
+            font-size: 48px;
+            font-weight: 800;
+            margin-bottom: 24px;
+            line-height: 1.2;
+        }
+
+        .hero p {
+            font-size: 20px;
+            opacity: 0.9;
+            max-width: 600px;
+            margin: 0 auto 40px;
+        }
+
+        .cta-button {
+            display: inline-block;
+            background: #48bb78;
+            color: white;
+            padding: 18px 36px;
+            border-radius: 12px;
+            font-size: 18px;
+            font-weight: 600;
+            text-decoration: none;
+            cursor: pointer;
+            border: none;
+            transition: all 0.3s;
+        }
+
+        .cta-button:hover {
+            background: #38a169;
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+        }
+
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 40px;
+            margin-bottom: 80px;
+        }
+
+        .feature-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 40px;
+            transition: all 0.3s;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-5px);
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .feature-icon {
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+
+        .feature-card h3 {
+            font-size: 24px;
+            margin-bottom: 16px;
+        }
+
+        .feature-card p {
+            opacity: 0.8;
+        }
+
+        .warning-box {
+            background: rgba(254, 215, 215, 0.1);
+            border: 1px solid rgba(252, 129, 129, 0.3);
+            border-radius: 12px;
+            padding: 24px;
+            margin: 60px 0;
+        }
+
+        .warning-box h3 {
+            color: #fc8181;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .footer {
+            text-align: center;
+            padding: 40px 0;
+            margin-top: 80px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            opacity: 0.7;
+        }
+
+        .stats {
+            display: flex;
+            justify-content: center;
+            gap: 60px;
+            margin: 40px 0;
+        }
+
+        .stat {
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 36px;
+            font-weight: 700;
+            color: #63b3ed;
+        }
+
+        .stat-label {
+            font-size: 14px;
+            opacity: 0.8;
+            margin-top: 8px;
+        }
+
+        @media (max-width: 768px) {
+            .hero h1 {
+                font-size: 36px;
+            }
+            
+            .hero p {
+                font-size: 18px;
+            }
+            
+            .features {
+                grid-template-columns: 1fr;
+            }
+            
+            .stats {
+                flex-direction: column;
+                gap: 30px;
+            }
+            
+            .nav {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <a href="/" class="logo">Server.<span>x</span></a>
+            <nav class="nav">
+                <a href="/login" class="nav-button">Login</a>
+                <a href="/explore" class="nav-button primary">Explore Servers</a>
+            </nav>
+        </header>
+
+        <main>
+            <section class="hero">
+                <h1>Create. Host. Share.</h1>
+                <p>Build mini websites with our advanced code editor. No servers to manage, no complex setup. Just pure creativity.</p>
+                <a href="/login" class="cta-button">Start Creating Free</a>
+                
+                <div class="stats">
+                    <div class="stat">
+                        <div class="stat-number" id="serverCount">0</div>
+                        <div class="stat-label">Active Servers</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-number" id="userCount">0</div>
+                        <div class="stat-label">Creators</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-number" id="fileCount">0</div>
+                        <div class="stat-label">Files Created</div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="features">
+                <div class="feature-card">
+                    <div class="feature-icon">💻</div>
+                    <h3>Advanced Code Editor</h3>
+                    <p>Full-featured editor with syntax highlighting, file management, and live preview. Code in HTML, CSS, JavaScript and more.</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">🔄</div>
+                    <h3>Auto-Renewal System</h3>
+                    <p>Servers stay active for 60 days. Renew with one click. No hidden fees, no subscriptions.</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">🔒</div>
+                    <h3>Secure & Private</h3>
+                    <p>Your code is stored securely in Supabase. Choose between public or private servers.</p>
+                </div>
+            </section>
+
+            <div class="warning-box">
+                <h3>⚠️ Important Notice</h3>
+                <p>
+                    <strong>Security Warning:</strong> When entering a server, the entire DOM changes to that server's content. 
+                    Only visit servers from trusted creators. Server.x is not responsible for user-generated content.
+                </p>
+                <p style="margin-top: 12px;">
+                    <strong>Content Restrictions:</strong> PNG, JPG, MP4, and other media files are blocked for safety. 
+                    Servers expire after 60 days unless renewed by the creator.
+                </p>
+            </div>
+
+            <section class="features">
+                <div class="feature-card">
+                    <div class="feature-icon">📁</div>
+                    <h3>File Management</h3>
+                    <p>Create folders, organize files, and manage your server structure with our intuitive file explorer.</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">💬</div>
+                    <h3>Community Feedback</h3>
+                    <p>Get comments and feedback on your servers. Learn from others and improve your skills.</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">⚡</div>
+                    <h3>Vercel Powered</h3>
+                    <p>Built on Vercel for blazing fast performance and reliable hosting worldwide.</p>
+                </div>
+            </section>
+        </main>
+
+        <footer class="footer">
+            <p>© 2024 Server.x. All server content belongs to Server.x platform.</p>
+            <p style="margin-top: 10px; font-size: 14px;">
+                By using Server.x, you agree that all servers created are property of Server.x.
+                You may not distribute server content outside the platform.
+            </p>
+        </footer>
+    </div>
+
+    <script>
+        // Simple counter animation
+        function animateCounter(element, target) {
+            let current = 0;
+            const increment = target / 50;
+            const timer = setInterval(() => {
+                current += increment;
+                if (current >= target) {
+                    current = target;
+                    clearInterval(timer);
+                }
+                element.textContent = Math.floor(current).toLocaleString();
+            }, 30);
+        }
+
+        // Load stats (mock data for now)
+        document.addEventListener('DOMContentLoaded', () => {
+            setTimeout(() => {
+                animateCounter(document.getElementById('serverCount'), 1247);
+                animateCounter(document.getElementById('userCount'), 568);
+                animateCounter(document.getElementById('fileCount'), 8923);
+            }, 500);
+        });
+
+        // Smooth scroll for anchor links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const targetId = this.getAttribute('href');
+                if (targetId === '#') return;
+                
+                const targetElement = document.querySelector(targetId);
+                if (targetElement) {
+                    targetElement.scrollIntoView({
+                        behavior: 'smooth'
+                    });
+                }
+            });
+        });
+    </script>
+</body>
+</html>
