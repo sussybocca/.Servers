@@ -1,3 +1,4 @@
+// pages/api/get-servers.js
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
@@ -15,8 +16,14 @@ export default async function handler(req, res) {
 
     if (error) throw error;
 
-    res.status(200).json({ servers });
+    res.status(200).json({ 
+      success: true,  // Add this
+      servers 
+    });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to load servers' });
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to load servers' 
+    });
   }
 }
