@@ -26,8 +26,8 @@ import dynamic from 'next/dynamic';
 
 
 import { useCallback } from 'react';
-import Particles from "@tsparticles/react";
-import { loadSlim } from "@tsparticles/slim";
+import Particles from 'react-tsparticles';
+import { loadSlim } from 'tsparticles-slim';
 
 export default function WindowsLogin() {
   const [email, setEmail] = useState('');
