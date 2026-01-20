@@ -13,7 +13,11 @@ export default function ExplorePage() {
   const [loadingServer, setLoadingServer] = useState(false);
   const [serverContent, setServerContent] = useState('');
   const [showWarning, setShowWarning] = useState(true);
-  const [iframeKey, setIframeKey] = useState(0); // For iframe refresh
+  const [iframeKey, setIframeKey] = useState(0);
+  const [viewMode, setViewMode] = useState('all'); // 'all', 'featured', 'trending', 'recent'
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [filePreview, setFilePreview] = useState('');
+  const [expandedFolders, setExpandedFolders] = useState({});
   const warningAccepted = useRef(false);
 
   useEffect(() => {
@@ -43,6 +47,55 @@ export default function ExplorePage() {
     }
   };
 
+  // 🔧 2. SERVER NAVIGATION SOCIAL FEATURES
+  const getFeaturedServers = () => {
+    return servers.filter(server => server.is_public && server.views > 10)
+      .sort((a, b) => b.views - a.views)
+      .slice(0, 6);
+  };
+
+  const getTrendingServers = () => {
+    return servers.filter(server => server.is_public)
+      .sort((a, b) => {
+        // Simple trending algorithm: more views = more trending
+        const aScore = a.views * (a.renewal_date ? 1.5 : 1);
+        const bScore = b.views * (b.renewal_date ? 1.5 : 1);
+        return bScore - aScore;
+      })
+      .slice(0, 8);
+  };
+
+  const getRecentlyUpdated = () => {
+    return servers.filter(server => server.is_public)
+      .sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at))
+      .slice(0, 6);
+  };
+
+  const getFilteredServers = () => {
+    switch (viewMode) {
+      case 'featured':
+        return getFeaturedServers();
+      case 'trending':
+        return getTrendingServers();
+      case 'recent':
+        return getRecentlyUpdated();
+      default:
+        return servers;
+    }
+  };
+
+  const getServerTags = (server) => {
+    // Simple tag extraction from description
+    const tags = [];
+    if (server.description?.toLowerCase().includes('html')) tags.push('HTML');
+    if (server.description?.toLowerCase().includes('css')) tags.push('CSS');
+    if (server.description?.toLowerCase().includes('javascript') || server.description?.toLowerCase().includes('js')) tags.push('JavaScript');
+    if (server.description?.toLowerCase().includes('game')) tags.push('Game');
+    if (server.description?.toLowerCase().includes('portfolio')) tags.push('Portfolio');
+    if (server.description?.toLowerCase().includes('demo')) tags.push('Demo');
+    return tags.slice(0, 3);
+  };
+
   const enterServer = async (serverId) => {
     if (!warningAccepted.current) {
       alert("Please acknowledge the security warning first.");
@@ -52,6 +105,9 @@ export default function ExplorePage() {
 
     setLoadingServer(true);
     setSelectedServer(serverId);
+    setSelectedFile(null);
+    setFilePreview('');
+    setExpandedFolders({});
     
     try {
       const filesRes = await fetch(`/api/get-server-files?serverId=${serverId}`);
@@ -138,14 +194,129 @@ export default function ExplorePage() {
       `);
     } finally {
       setLoadingServer(false);
-      setIframeKey(prev => prev + 1); // Force iframe refresh
+      setIframeKey(prev => prev + 1);
     }
+  };
+
+  // 🔧 3. ENHANCED FILE PREVIEW
+  const viewFile = (file) => {
+    setSelectedFile(file);
+    
+    // Determine file type and format content
+    let previewContent = '';
+    if (file.content) {
+      const ext = file.path.split('.').pop().toLowerCase();
+      if (['html', 'css', 'js', 'json', 'txt', 'md'].includes(ext)) {
+        previewContent = file.content;
+      } else {
+        previewContent = `// Binary or unsupported file type: ${file.path}\n// File size: ${file.content.length} bytes`;
+      }
+    } else {
+      previewContent = '// No content available for this file';
+    }
+    
+    setFilePreview(previewContent);
+  };
+
+  const closeFilePreview = () => {
+    setSelectedFile(null);
+    setFilePreview('');
+  };
+
+  const toggleFolder = (folderPath) => {
+    setExpandedFolders(prev => ({
+      ...prev,
+      [folderPath]: !prev[folderPath]
+    }));
+  };
+
+  const organizeFilesTree = (files) => {
+    const tree = {};
+    
+    files.forEach(file => {
+      const parts = file.path.split('/').filter(p => p);
+      let current = tree;
+      
+      parts.forEach((part, index) => {
+        if (!current[part]) {
+          current[part] = index === parts.length - 1 ? { ...file, isFile: true } : {};
+        }
+        if (index < parts.length - 1) {
+          current = current[part];
+        }
+      });
+    });
+    
+    return tree;
+  };
+
+  const renderFileTree = (tree, path = '') => {
+    const entries = Object.entries(tree);
+    
+    return entries.map(([name, item]) => {
+      const fullPath = path ? `${path}/${name}` : `/${name}`;
+      
+      if (item.isFile) {
+        return (
+          <motion.div
+            key={fullPath}
+            style={styles.fileTreeItem}
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            whileHover={{ backgroundColor: 'rgba(66, 133, 244, 0.1)' }}
+            onClick={() => viewFile(item)}
+          >
+            <span style={styles.fileIcon}>
+              {item.path.endsWith('.html') ? '🌐' : 
+               item.path.endsWith('.js') ? '📜' : 
+               item.path.endsWith('.css') ? '🎨' : 
+               item.path.endsWith('.json') ? '📋' : '📄'}
+            </span>
+            <span style={styles.fileName}>{name}</span>
+          </motion.div>
+        );
+      } else {
+        const isExpanded = expandedFolders[fullPath];
+        const hasChildren = Object.keys(item).length > 0;
+        
+        return (
+          <div key={fullPath}>
+            <motion.div
+              style={styles.folderItem}
+              whileHover={{ backgroundColor: 'rgba(255, 193, 7, 0.1)' }}
+              onClick={() => hasChildren && toggleFolder(fullPath)}
+            >
+              <span style={styles.folderIcon}>
+                {hasChildren ? (isExpanded ? '📂' : '📁') : '📁'}
+              </span>
+              <span style={styles.folderName}>{name}</span>
+              {hasChildren && (
+                <motion.span
+                  animate={{ rotate: isExpanded ? 90 : 0 }}
+                  style={styles.arrow}
+                >
+                  ▶
+                </motion.span>
+              )}
+            </motion.div>
+            {isExpanded && hasChildren && (
+              <div style={styles.folderContent}>
+                {renderFileTree(item, fullPath)}
+              </div>
+            )}
+          </div>
+        );
+      }
+    });
   };
 
   const goBackToExplore = () => {
     setSelectedServer(null);
     setServerFiles([]);
     setServerContent('');
+    setSelectedFile(null);
+    setFilePreview('');
+    setExpandedFolders({});
   };
 
   const logout = () => {
@@ -168,8 +339,9 @@ export default function ExplorePage() {
     }
   };
 
-  // Get current server details
   const currentServer = servers.find(s => s.id === selectedServer);
+  const filteredServers = getFilteredServers();
+  const fileTree = organizeFilesTree(serverFiles);
 
   // Render warning modal
   const renderWarningModal = () => (
@@ -223,6 +395,43 @@ export default function ExplorePage() {
           >
             🚫 Return Home
           </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+
+  // Render file preview modal
+  const renderFilePreview = () => (
+    <motion.div
+      style={styles.previewOverlay}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={closeFilePreview}
+    >
+      <motion.div
+        style={styles.previewModal}
+        initial={{ scale: 0.9, y: 20 }}
+        animate={{ scale: 1, y: 0 }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={styles.previewHeader}>
+          <h3 style={styles.previewTitle}>
+            📄 {selectedFile?.path || 'File Preview'}
+          </h3>
+          <motion.button
+            style={styles.closePreviewButton}
+            onClick={closeFilePreview}
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+          >
+            ✕
+          </motion.button>
+        </div>
+        <div style={styles.previewContent}>
+          <pre style={styles.codePreview}>
+            {filePreview}
+          </pre>
         </div>
       </motion.div>
     </motion.div>
@@ -362,12 +571,13 @@ export default function ExplorePage() {
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.2 }}
           >
+            {/* 🔧 1. ENHANCED IFRAME SECURITY - Reduced permissions */}
             <iframe
               key={iframeKey}
               srcDoc={serverContent}
               style={styles.serverIframe}
               title="Server Content"
-              sandbox="allow-scripts allow-same-origin allow-forms allow-modals"
+              sandbox="allow-scripts"
             />
           </motion.div>
         )}
@@ -384,31 +594,22 @@ export default function ExplorePage() {
           whileHover={{ x: 5 }}
         >
           📁 Server Files ({serverFiles.length})
+          {serverFiles.length > 0 && (
+            <span style={styles.fileListHint}> (Click any file to preview)</span>
+          )}
         </motion.h4>
-        <div style={styles.filesGrid}>
-          {serverFiles.slice(0, 8).map((file, index) => (
-            <motion.div
-              key={file.path}
-              style={styles.fileItem}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: index * 0.05 }}
-              whileHover={{ scale: 1.02, backgroundColor: 'rgba(66, 133, 244, 0.1)' }}
-            >
-              <span style={styles.fileIcon}>
-                {file.path.endsWith('.html') ? '🌐' : 
-                 file.path.endsWith('.js') ? '📜' : 
-                 file.path.endsWith('.css') ? '🎨' : '📄'}
-              </span>
-              <span style={styles.fileName}>{file.path}</span>
-            </motion.div>
-          ))}
+        <div style={styles.fileTree}>
+          {renderFileTree(fileTree)}
         </div>
       </motion.div>
+
+      <AnimatePresence>
+        {selectedFile && renderFilePreview()}
+      </AnimatePresence>
     </motion.div>
   );
 
-  // Render explore grid
+  // Render explore grid with social features
   const renderExploreGrid = () => (
     <motion.div
       key="explore-grid"
@@ -435,6 +636,40 @@ export default function ExplorePage() {
         Click any server to view its content in a <span style={{ color: '#4285f4', fontWeight: 'bold' }}>secure sandbox</span>
       </motion.p>
 
+      {/* 🔧 2. SOCIAL NAVIGATION CONTROLS */}
+      <motion.div 
+        style={styles.navigationControls}
+        initial={{ y: -20, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ delay: 0.6 }}
+      >
+        <div style={styles.viewModeButtons}>
+          {[
+            { id: 'all', label: '🌐 All Servers', count: servers.length },
+            { id: 'featured', label: '⭐ Featured', count: getFeaturedServers().length },
+            { id: 'trending', label: '📈 Trending', count: getTrendingServers().length },
+            { id: 'recent', label: '🕐 Recent', count: getRecentlyUpdated().length }
+          ].map((mode) => (
+            <motion.button
+              key={mode.id}
+              style={{
+                ...styles.viewModeButton,
+                background: viewMode === mode.id 
+                  ? 'linear-gradient(90deg, #4285f4, #34a853)' 
+                  : 'rgba(255, 255, 255, 0.05)',
+                border: `2px solid ${viewMode === mode.id ? '#4285f4' : 'rgba(255,255,255,0.1)'}`
+              }}
+              onClick={() => setViewMode(mode.id)}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+            >
+              {mode.label}
+              <span style={styles.viewCount}>{mode.count}</span>
+            </motion.button>
+          ))}
+        </div>
+      </motion.div>
+
       <motion.div
         style={styles.serversGrid}
         initial="hidden"
@@ -447,93 +682,153 @@ export default function ExplorePage() {
           }
         }}
       >
-        {servers.map((server, index) => (
-          <Tilt
-            key={server.id}
-            tiltMaxAngleX={10}
-            tiltMaxAngleY={10}
-            perspective={1000}
-            transitionSpeed={1000}
-            scale={1.05}
-            glareEnable={true}
-            glareMaxOpacity={0.2}
-            glareColor="#ffffff"
-            glarePosition="all"
-            glareBorderRadius="16px"
-          >
-            <motion.div
-              style={styles.serverCard}
-              onClick={() => enterServer(server.id)}
-              variants={{
-                hidden: { opacity: 0, y: 40, scale: 0.8 },
-                visible: { 
-                  opacity: 1, 
-                  y: 0, 
-                  scale: 1,
-                  transition: { type: "spring", stiffness: 80 }
-                }
-              }}
-              whileHover={{
-                y: -10,
-                scale: 1.05,
-                boxShadow: "0 20px 40px rgba(66, 133, 244, 0.2)"
-              }}
-              whileTap={{ scale: 0.95 }}
+        {filteredServers.map((server, index) => {
+          const tags = getServerTags(server);
+          const isFeatured = getFeaturedServers().some(s => s.id === server.id);
+          const isTrending = getTrendingServers().some(s => s.id === server.id);
+          const isRecent = getRecentlyUpdated().some(s => s.id === server.id);
+          
+          return (
+            <Tilt
+              key={server.id}
+              tiltMaxAngleX={10}
+              tiltMaxAngleY={10}
+              perspective={1000}
+              transitionSpeed={1000}
+              scale={1.05}
+              glareEnable={true}
+              glareMaxOpacity={0.2}
+              glareColor="#ffffff"
+              glarePosition="all"
+              glareBorderRadius="16px"
             >
-              <div className="card-glow" style={styles.cardGlow} />
-              <div style={styles.serverHeaderSmall}>
-                <motion.h3
-                  style={styles.serverName}
-                  animate={{ 
-                    color: server.is_public ? '#4285f4' : '#ea4335',
-                    textShadow: server.is_public 
-                      ? '0 0 10px rgba(66, 133, 244, 0.3)' 
-                      : '0 0 10px rgba(234, 67, 53, 0.3)'
-                  }}
-                >
-                  {server.name}
-                </motion.h3>
-                <motion.span
-                  style={{
-                    ...styles.serverBadge,
-                    backgroundColor: server.is_public 
-                      ? 'rgba(66, 133, 244, 0.15)' 
-                      : 'rgba(234, 67, 53, 0.15)',
-                    color: server.is_public ? '#4285f4' : '#ea4335',
-                    border: `2px solid ${server.is_public ? '#4285f4' : '#ea4335'}`
-                  }}
-                  whileHover={{ 
-                    scale: 1.15,
-                    boxShadow: `0 0 10px ${server.is_public ? '#4285f4' : '#ea4335'}`
-                  }}
-                >
-                  {server.is_public ? '🌐 PUBLIC' : '🔒 PRIVATE'}
-                </motion.span>
-              </div>
-              <motion.p
-                style={styles.serverDescription}
-              >
-                {server.description || 'No description provided.'}
-              </motion.p>
               <motion.div
-                style={styles.serverStatsGrid}
+                style={styles.serverCard}
+                onClick={() => enterServer(server.id)}
+                variants={{
+                  hidden: { opacity: 0, y: 40, scale: 0.8 },
+                  visible: { 
+                    opacity: 1, 
+                    y: 0, 
+                    scale: 1,
+                    transition: { type: "spring", stiffness: 80 }
+                  }
+                }}
+                whileHover={{
+                  y: -10,
+                  scale: 1.05,
+                  boxShadow: "0 20px 40px rgba(66, 133, 244, 0.2)"
+                }}
+                whileTap={{ scale: 0.95 }}
               >
-                <motion.span
-                  whileHover={{ scale: 1.1 }}
-                  style={styles.statSmall}
+                <div className="card-glow" style={styles.cardGlow} />
+                
+                {/* Badge indicators */}
+                <div style={styles.cardBadges}>
+                  {isFeatured && (
+                    <motion.span
+                      style={styles.featuredBadge}
+                      whileHover={{ scale: 1.2 }}
+                    >
+                      ⭐ Featured
+                    </motion.span>
+                  )}
+                  {isTrending && (
+                    <motion.span
+                      style={styles.trendingBadge}
+                      whileHover={{ scale: 1.2 }}
+                    >
+                      📈 Trending
+                    </motion.span>
+                  )}
+                  {isRecent && (
+                    <motion.span
+                      style={styles.recentBadge}
+                      whileHover={{ scale: 1.2 }}
+                    >
+                      🕐 Recent
+                    </motion.span>
+                  )}
+                </div>
+                
+                <div style={styles.serverHeaderSmall}>
+                  <motion.h3
+                    style={styles.serverName}
+                    animate={{ 
+                      color: server.is_public ? '#4285f4' : '#ea4335',
+                      textShadow: server.is_public 
+                        ? '0 0 10px rgba(66, 133, 244, 0.3)' 
+                        : '0 0 10px rgba(234, 67, 53, 0.3)'
+                    }}
+                  >
+                    {server.name}
+                  </motion.h3>
+                  <motion.span
+                    style={{
+                      ...styles.serverBadge,
+                      backgroundColor: server.is_public 
+                        ? 'rgba(66, 133, 244, 0.15)' 
+                        : 'rgba(234, 67, 53, 0.15)',
+                      color: server.is_public ? '#4285f4' : '#ea4335',
+                      border: `2px solid ${server.is_public ? '#4285f4' : '#ea4335'}`
+                    }}
+                    whileHover={{ 
+                      scale: 1.15,
+                      boxShadow: `0 0 10px ${server.is_public ? '#4285f4' : '#ea4335'}`
+                    }}
+                  >
+                    {server.is_public ? '🌐 PUBLIC' : '🔒 PRIVATE'}
+                  </motion.span>
+                </div>
+                
+                <motion.p
+                  style={styles.serverDescription}
                 >
-                  👁️ {server.views || 0} views
-                </motion.span>
-                <motion.span
-                  whileHover={{ scale: 1.1 }}
-                  style={styles.statSmall}
+                  {server.description || 'No description provided.'}
+                </motion.p>
+                
+                {/* Tags */}
+                {tags.length > 0 && (
+                  <motion.div 
+                    style={styles.tagContainer}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                  >
+                    {tags.map((tag, idx) => (
+                      <motion.span
+                        key={tag}
+                        style={styles.tag}
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        transition={{ delay: idx * 0.1 }}
+                        whileHover={{ scale: 1.1 }}
+                      >
+                        {tag}
+                      </motion.span>
+                    ))}
+                  </motion.div>
+                )}
+                
+                <motion.div
+                  style={styles.serverStatsGrid}
                 >
-                  🔄 {server.renewal_date ? 'Renews: ' + new Date(server.renewal_date).toLocaleDateString() : 'No renewal'}
-                </motion.span>
+                  <motion.span
+                    whileHover={{ scale: 1.1 }}
+                    style={styles.statSmall}
+                  >
+                    👁️ {server.views || 0} views
+                  </motion.span>
+                  <motion.span
+                    whileHover={{ scale: 1.1 }}
+                    style={styles.statSmall}
+                  >
+                    🔄 {server.renewal_date ? 'Renews: ' + new Date(server.renewal_date).toLocaleDateString() : 'No renewal'}
+                  </motion.span>
+                </motion.div>
               </motion.div>
-            </motion.div>
-          </Tilt>
-        ))}
+            </Tilt>
+          );
+        })}
       </motion.div>
     </motion.div>
   );
@@ -703,10 +998,43 @@ const styles = {
     fontSize: '20px',
     color: '#aaa',
     textAlign: 'center',
-    marginBottom: '50px',
+    marginBottom: '30px',
     fontWeight: '400',
     maxWidth: '600px',
-    margin: '0 auto 50px'
+    margin: '0 auto 30px'
+  },
+  navigationControls: {
+    marginBottom: '40px',
+    padding: '20px',
+    background: 'rgba(255, 255, 255, 0.03)',
+    borderRadius: '15px',
+    border: '1px solid rgba(66, 133, 244, 0.1)'
+  },
+  viewModeButtons: {
+    display: 'flex',
+    gap: '15px',
+    justifyContent: 'center',
+    flexWrap: 'wrap'
+  },
+  viewModeButton: {
+    padding: '12px 24px',
+    borderRadius: '25px',
+    cursor: 'pointer',
+    fontWeight: '600',
+    fontSize: '14px',
+    color: 'white',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    transition: 'all 0.3s ease',
+    border: 'none'
+  },
+  viewCount: {
+    background: 'rgba(0,0,0,0.3)',
+    padding: '2px 8px',
+    borderRadius: '10px',
+    fontSize: '12px',
+    fontWeight: '700'
   },
   serversGrid: { 
     display: 'grid', 
@@ -724,7 +1052,7 @@ const styles = {
     position: 'relative', 
     overflow: 'hidden',
     height: '100%',
-    minHeight: '250px',
+    minHeight: '280px',
     display: 'flex',
     flexDirection: 'column',
     justifyContent: 'space-between',
@@ -740,11 +1068,50 @@ const styles = {
     transition: 'left 0.7s cubic-bezier(0.19, 1, 0.22, 1)',
     pointerEvents: 'none'
   },
+  cardBadges: {
+    position: 'absolute',
+    top: '15px',
+    left: '15px',
+    display: 'flex',
+    gap: '8px',
+    zIndex: 1
+  },
+  featuredBadge: {
+    background: 'linear-gradient(90deg, #ffd700, #ffa500)',
+    color: '#000',
+    padding: '4px 10px',
+    borderRadius: '12px',
+    fontSize: '10px',
+    fontWeight: '800',
+    letterSpacing: '0.5px',
+    boxShadow: '0 0 10px rgba(255, 215, 0, 0.3)'
+  },
+  trendingBadge: {
+    background: 'linear-gradient(90deg, #ff6b6b, #ff8e8e)',
+    color: 'white',
+    padding: '4px 10px',
+    borderRadius: '12px',
+    fontSize: '10px',
+    fontWeight: '800',
+    letterSpacing: '0.5px',
+    boxShadow: '0 0 10px rgba(255, 107, 107, 0.3)'
+  },
+  recentBadge: {
+    background: 'linear-gradient(90deg, #4285f4, #8ab4f8)',
+    color: 'white',
+    padding: '4px 10px',
+    borderRadius: '12px',
+    fontSize: '10px',
+    fontWeight: '800',
+    letterSpacing: '0.5px',
+    boxShadow: '0 0 10px rgba(66, 133, 244, 0.3)'
+  },
   serverHeaderSmall: { 
     display: 'flex', 
     justifyContent: 'space-between', 
     alignItems: 'flex-start', 
-    marginBottom: '15px'
+    marginBottom: '15px',
+    marginTop: '10px'
   },
   serverName: { 
     margin: 0, 
@@ -765,8 +1132,23 @@ const styles = {
     color: '#aaa', 
     fontSize: '14px', 
     lineHeight: '1.6', 
-    marginBottom: '20px', 
+    marginBottom: '15px', 
     flex: 1
+  },
+  tagContainer: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '8px',
+    marginBottom: '15px'
+  },
+  tag: {
+    background: 'rgba(66, 133, 244, 0.15)',
+    color: '#8ab4f8',
+    padding: '4px 10px',
+    borderRadius: '12px',
+    fontSize: '11px',
+    fontWeight: '600',
+    border: '1px solid rgba(66, 133, 244, 0.3)'
   },
   serverStatsGrid: { 
     display: 'flex', 
@@ -936,7 +1318,7 @@ const styles = {
     background: 'rgba(26, 26, 26, 0.8)',
     borderTop: '1px solid rgba(255,255,255,0.1)',
     padding: '20px 30px',
-    maxHeight: '120px',
+    maxHeight: '200px',
     overflowY: 'auto'
   },
   fileListTitle: {
@@ -945,26 +1327,51 @@ const styles = {
     fontWeight: '600',
     color: '#fff',
     cursor: 'pointer',
-    display: 'inline-block'
-  },
-  filesGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+    display: 'flex',
+    alignItems: 'center',
     gap: '10px'
   },
-  fileItem: {
-    background: 'rgba(255,255,255,0.05)',
-    padding: '8px 12px',
-    borderRadius: '8px',
-    fontSize: '13px',
+  fileListHint: {
+    fontSize: '12px',
+    color: '#888',
+    fontWeight: '400'
+  },
+  fileTree: {
+    fontFamily: 'monospace',
+    fontSize: '13px'
+  },
+  fileTreeItem: {
+    padding: '6px 10px 6px 20px',
+    borderRadius: '6px',
     color: '#ccc',
     display: 'flex',
     alignItems: 'center',
     gap: '10px',
-    cursor: 'default',
-    transition: 'all 0.2s ease'
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    marginBottom: '2px'
+  },
+  folderItem: {
+    padding: '6px 10px 6px 10px',
+    borderRadius: '6px',
+    color: '#ffc107',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    marginBottom: '2px',
+    fontWeight: '600'
+  },
+  folderContent: {
+    marginLeft: '20px',
+    borderLeft: '1px solid rgba(255, 193, 7, 0.2)',
+    paddingLeft: '10px'
   },
   fileIcon: {
+    fontSize: '14px'
+  },
+  folderIcon: {
     fontSize: '14px'
   },
   fileName: {
@@ -972,6 +1379,88 @@ const styles = {
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
     flex: 1
+  },
+  folderName: {
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    flex: 1
+  },
+  arrow: {
+    fontSize: '10px',
+    marginLeft: 'auto'
+  },
+  // File Preview Modal
+  previewOverlay: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    background: 'rgba(0, 0, 0, 0.8)',
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 2000,
+    backdropFilter: 'blur(5px)'
+  },
+  previewModal: {
+    background: '#1a1a1a',
+    color: 'white',
+    width: '90%',
+    maxWidth: '800px',
+    height: '80vh',
+    borderRadius: '15px',
+    overflow: 'hidden',
+    border: '2px solid rgba(66, 133, 244, 0.3)',
+    boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
+    display: 'flex',
+    flexDirection: 'column'
+  },
+  previewHeader: {
+    background: 'rgba(26, 26, 26, 0.9)',
+    padding: '20px',
+    borderBottom: '1px solid rgba(66, 133, 244, 0.2)',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center'
+  },
+  previewTitle: {
+    margin: 0,
+    fontSize: '18px',
+    color: '#fff',
+    fontWeight: '600'
+  },
+  closePreviewButton: {
+    background: 'rgba(220, 53, 69, 0.2)',
+    color: '#ff6b6b',
+    border: '1px solid rgba(220, 53, 69, 0.3)',
+    width: '32px',
+    height: '32px',
+    borderRadius: '50%',
+    cursor: 'pointer',
+    fontSize: '14px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  previewContent: {
+    flex: 1,
+    overflow: 'auto',
+    padding: '0'
+  },
+  codePreview: {
+    margin: 0,
+    padding: '20px',
+    background: '#0a0a0a',
+    color: '#f8f8f2',
+    fontSize: '13px',
+    fontFamily: "'Fira Code', 'Cascadia Code', monospace",
+    lineHeight: '1.5',
+    whiteSpace: 'pre-wrap',
+    wordWrap: 'break-word',
+    height: '100%',
+    overflow: 'auto'
   },
   // Modal Styles
   modalOverlay: { 
