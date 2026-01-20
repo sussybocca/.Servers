@@ -246,6 +246,9 @@ export default function EditorPage() {
 
   const getFileLanguage = (filename) => {
     if (filename.endsWith('.js')) return 'javascript';
+    if (filename.endsWith('.jsx')) return 'javascript'; // JSX uses JavaScript language
+    if (filename.endsWith('.ts')) return 'typescript';
+    if (filename.endsWith('.tsx')) return 'typescript';
     if (filename.endsWith('.html')) return 'html';
     if (filename.endsWith('.css')) return 'css';
     if (filename.endsWith('.json')) return 'json';
@@ -264,6 +267,17 @@ export default function EditorPage() {
     return parentPath === currentPath.substring(0, currentPath.lastIndexOf('/') + 1) || 
            (currentPath === '/' && !f.path.includes('/'));
   });
+
+  // Get file icon based on extension
+  const getFileIcon = (filename) => {
+    if (filename.endsWith('.js') || filename.endsWith('.jsx')) return '⚛️';
+    if (filename.endsWith('.ts') || filename.endsWith('.tsx')) return '📘';
+    if (filename.endsWith('.html')) return '🌐';
+    if (filename.endsWith('.css')) return '🎨';
+    if (filename.endsWith('.json')) return '📋';
+    if (filename.endsWith('.md')) return '📝';
+    return '📄';
+  };
 
   // Show loading while checking auth
   if (!currentUser) {
@@ -366,6 +380,8 @@ export default function EditorPage() {
                 <div style={styles.infoBox}>
                   <strong>⚠️ Important:</strong> Servers expire after 60 days unless renewed.
                   Default files (index.html, style.css, script.js) will be created automatically.
+                  <br /><br />
+                  <strong>✨ JSX Support:</strong> You can now create .jsx files for React components!
                 </div>
 
                 {message && (
@@ -415,12 +431,15 @@ export default function EditorPage() {
                 {/* Create File Modal */}
                 {isCreatingFile && (
                   <div style={styles.modal}>
+                    <div style={styles.fileExtensionHint}>
+                      Supported: .js, .jsx, .ts, .tsx, .html, .css, .json, .md
+                    </div>
                     <input
                       type="text"
                       value={newFileName}
                       onChange={(e) => setNewFileName(e.target.value)}
                       style={styles.modalInput}
-                      placeholder="filename.js"
+                      placeholder="filename.jsx"
                       onKeyPress={(e) => e.key === 'Enter' && createNewFile()}
                     />
                     <div style={styles.modalActions}>
@@ -460,18 +479,30 @@ export default function EditorPage() {
                 ))}
                 
                 {/* Files List */}
-                {currentFiles.map(file => (
-                  <div 
-                    key={file.path}
-                    style={{
-                      ...styles.fileItem,
-                      ...(selectedFile?.path === file.path ? styles.selectedFile : {})
-                    }}
-                    onClick={() => handleFileSelect(file)}
-                  >
-                    📄 {file.path.split('/').pop()}
+                {currentFiles.map(file => {
+                  const fileName = file.path.split('/').pop();
+                  return (
+                    <div 
+                      key={file.path}
+                      style={{
+                        ...styles.fileItem,
+                        ...(selectedFile?.path === file.path ? styles.selectedFile : {})
+                      }}
+                      onClick={() => handleFileSelect(file)}
+                      title={file.path}
+                    >
+                      {getFileIcon(fileName)} {fileName}
+                    </div>
+                  );
+                })}
+                
+                {/* Empty state */}
+                {currentFiles.length === 0 && currentFolders.length === 0 && (
+                  <div style={styles.emptyState}>
+                    <p style={styles.emptyStateText}>No files or folders</p>
+                    <p style={styles.emptyStateSubtext}>Create your first file!</p>
                   </div>
-                ))}
+                )}
               </div>
               
               {/* Code Editor */}
@@ -480,7 +511,10 @@ export default function EditorPage() {
                   <div style={styles.fileInfo}>
                     {selectedFile ? (
                       <>
-                        <span style={styles.fileName}>{selectedFile.path.split('/').pop()}</span>
+                        <span style={styles.fileName}>
+                          {getFileIcon(selectedFile.path.split('/').pop())} 
+                          {selectedFile.path.split('/').pop()}
+                        </span>
                         <span style={styles.filePath}>{selectedFile.path}</span>
                       </>
                     ) : (
@@ -509,6 +543,8 @@ export default function EditorPage() {
                         fontSize: 14,
                         wordWrap: 'on',
                         automaticLayout: true,
+                        formatOnPaste: true,
+                        formatOnType: true,
                       }}
                     />
                   </div>
@@ -516,6 +552,18 @@ export default function EditorPage() {
                   <div style={styles.emptyEditor}>
                     <p>Select a file from the sidebar to start editing</p>
                     <p>Or create a new file using the 📄 button</p>
+                    <div style={styles.supportedFiles}>
+                      <h4>Supported file types:</h4>
+                      <ul style={styles.fileTypesList}>
+                        <li>📄 JavaScript (.js)</li>
+                        <li>⚛️ JSX (.jsx)</li>
+                        <li>📘 TypeScript (.ts, .tsx)</li>
+                        <li>🌐 HTML (.html)</li>
+                        <li>🎨 CSS (.css)</li>
+                        <li>📋 JSON (.json)</li>
+                        <li>📝 Markdown (.md)</li>
+                      </ul>
+                    </div>
                   </div>
                 )}
                 
@@ -537,11 +585,20 @@ export default function EditorPage() {
               <h3>How it works:</h3>
               <ol style={styles.instructionsList}>
                 <li>Create server with name and description</li>
-                <li>Use code editor to add HTML, CSS, JS files</li>
+                <li>Use code editor to add HTML, CSS, JS, JSX files</li>
                 <li>Organize files in folders</li>
                 <li>Publish when ready</li>
                 <li>Renew every 60 days to keep it alive</li>
               </ol>
+              <div style={styles.featuresList}>
+                <h4>✨ New Features:</h4>
+                <ul>
+                  <li>Full JSX/React support</li>
+                  <li>TypeScript support (.ts, .tsx)</li>
+                  <li>File type icons</li>
+                  <li>Improved editor formatting</li>
+                </ul>
+              </div>
             </div>
           )}
         </div>
@@ -750,6 +807,11 @@ const styles = {
     marginBottom: 15,
     border: '1px solid #3c3c3c'
   },
+  fileExtensionHint: {
+    fontSize: 11,
+    color: '#888',
+    marginBottom: 8
+  },
   modalInput: {
     width: '100%',
     padding: '8px',
@@ -785,17 +847,40 @@ const styles = {
     color: '#569cd6',
     cursor: 'pointer',
     borderRadius: 4,
-    marginBottom: 4
+    marginBottom: 4,
+    '&:hover': {
+      backgroundColor: '#2a2d2e'
+    }
   },
   fileItem: {
     padding: '8px 12px',
     color: '#ccc',
     cursor: 'pointer',
     borderRadius: 4,
-    marginBottom: 4
+    marginBottom: 4,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    '&:hover': {
+      backgroundColor: '#2a2d2e'
+    }
   },
   selectedFile: {
     backgroundColor: '#094771'
+  },
+  emptyState: {
+    textAlign: 'center',
+    padding: '40px 20px',
+    color: '#888'
+  },
+  emptyStateText: {
+    margin: 0,
+    fontSize: 14
+  },
+  emptyStateSubtext: {
+    margin: '5px 0 0 0',
+    fontSize: 12,
+    color: '#666'
   },
   editorPanel: {
     flex: 1,
@@ -818,7 +903,10 @@ const styles = {
   },
   fileName: {
     fontSize: 16,
-    color: '#fff'
+    color: '#fff',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8
   },
   filePath: {
     fontSize: 12,
@@ -848,6 +936,16 @@ const styles = {
     color: '#888',
     fontSize: 16
   },
+  supportedFiles: {
+    marginTop: 30,
+    textAlign: 'left',
+    maxWidth: 300
+  },
+  fileTypesList: {
+    listStyle: 'none',
+    padding: 0,
+    margin: '10px 0 0 0'
+  },
   message: {
     margin: '15px',
     padding: '12px',
@@ -863,5 +961,22 @@ const styles = {
   loadingText: {
     fontSize: 18,
     color: '#ccc'
+  },
+  instructions: {
+    backgroundColor: '#252526',
+    border: '1px solid #3c3c3c',
+    borderRadius: 8,
+    padding: 20,
+    maxWidth: 600,
+    margin: '20px auto 0'
+  },
+  instructionsList: {
+    paddingLeft: 20,
+    lineHeight: 1.6
+  },
+  featuresList: {
+    marginTop: 20,
+    paddingTop: 20,
+    borderTop: '1px solid #3c3c3c'
   }
 };
