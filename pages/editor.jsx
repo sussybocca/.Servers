@@ -1997,7 +1997,7 @@ export default App;`
         </main>
       </div>
 
-           `}</style>
+      
       
       <style jsx>{`
         .editor-container {
