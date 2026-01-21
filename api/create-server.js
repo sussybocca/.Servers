@@ -6,36 +6,93 @@ const supabase = createClient(
   process.env.SUPABASE_ANON_KEY!
 );
 
+// Helper to get user from session
+async function getUserIdFromSession(req) {
+  try {
+    // Get session token from cookie
+    const cookieHeader = req.headers.cookie || '';
+    const cookies = Object.fromEntries(
+      cookieHeader.split('; ').map(c => c.split('='))
+    );
+    
+    const sessionToken = cookies['__Host-session_secure'];
+    
+    if (!sessionToken) {
+      return null;
+    }
+    
+    // Find session in database
+    const { data: session, error } = await supabase
+      .from('sessions')
+      .select('user_id, expires_at')
+      .eq('session_token', sessionToken)
+      .single();
+    
+    if (error || !session) {
+      return null;
+    }
+    
+    // Check if session is expired
+    if (new Date(session.expires_at) < new Date()) {
+      return null;
+    }
+    
+    return session.user_id;
+  } catch (error) {
+    console.error('Session validation error:', error);
+    return null;
+  }
+}
+
 export default async function handler(req, res) {
-  if (req.method === 'POST') {
-    return handleCreateServer(req, res);
-  } else if (req.method === 'GET') {
-    return handleGetServersOrTokens(req, res);
-  } else if (req.method === 'PUT') {
-    return handleUpdateServer(req, res);
-  } else if (req.method === 'DELETE') {
-    return handleDelete(req, res);
-  } else {
-    return res.status(405).json({ error: 'Method not allowed' });
+  try {
+    // Get user ID from session (not from request body!)
+    const userId = await getUserIdFromSession(req);
+    
+    if (!userId) {
+      return res.status(401).json({ 
+        success: false, 
+        error: 'Authentication required. Please log in.' 
+      });
+    }
+    
+    // Now route based on method
+    switch (req.method) {
+      case 'POST':
+        return await handleCreateServer(req, res, userId);
+      case 'GET':
+        return await handleGetServersOrTokens(req, res, userId);
+      case 'PUT':
+        return await handleUpdateServer(req, res, userId);
+      case 'DELETE':
+        return await handleDelete(req, res, userId);
+      default:
+        return res.status(405).json({ error: 'Method not allowed' });
+    }
+  } catch (error) {
+    console.error('API Error:', error);
+    return res.status(500).json({ 
+      success: false, 
+      error: 'Server error: ' + error.message 
+    });
   }
 }
 
 // Create server handler
-async function handleCreateServer(req, res) {
+async function handleCreateServer(req, res, userId) {
   try {
     const { 
       name, 
       description, 
-      userId, 
       privacy = 'public',
       generateToken = false
     } = req.body;
     
     // Validate required fields
-    if (!name || !userId) {
+    if (!name) {
       return res.status(400).json({ 
         success: false, 
-        error: 'Server name and user ID are required' 
+        error: 'Server name is required' 
       });
     }
     
@@ -46,10 +103,11 @@ async function handleCreateServer(req, res) {
         {
           name,
           description,
-          owner_id: userId,
+          owner_id: userId, // Use authenticated user ID
           is_public: privacy === 'public',
           created_at: new Date().toISOString(),
-          renewal_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() // 30 days
+          renewal_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+          updated_at: new Date().toISOString()
         }
       ])
       .select()
@@ -73,7 +131,7 @@ async function handleCreateServer(req, res) {
             p_table_name: 'servers',
             p_record_id: server.id,
             p_permissions: { read: true, write: true, delete: false },
-            p_expires_in_hours: 720 // 30 days
+            p_expires_in_hours: 720
           });
         
         if (tokenResult) {
@@ -85,7 +143,7 @@ async function handleCreateServer(req, res) {
     }
 
     // Return response
-    res.status(200).json({ 
+    return res.status(200).json({ 
       success: true, 
       server: {
         id: server.id,
@@ -101,7 +159,7 @@ async function handleCreateServer(req, res) {
     
   } catch (error) {
     console.error('Error creating server:', error);
-    res.status(500).json({ 
+    return res.status(500).json({ 
       success: false, 
       error: 'Failed to create server: ' + error.message 
     });
@@ -109,16 +167,9 @@ async function handleCreateServer(req, res) {
 }
 
 // Get servers or tokens handler
-async function handleGetServersOrTokens(req, res) {
+async function handleGetServersOrTokens(req, res, userId) {
   try {
-    const { userId, getTokens = false, serverId } = req.query;
-    
-    if (!userId) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'User ID is required' 
-      });
-    }
+    const { getTokens = false, serverId } = req.query;
     
     if (getTokens === 'true') {
       // Get user's tokens
@@ -156,6 +207,14 @@ async function handleGetServersOrTokens(req, res) {
         });
       }
       
+      // Check if user owns the server
+      if (server.owner_id !== userId) {
+        return res.status(403).json({ 
+          success: false, 
+          error: 'You do not have permission to view this server' 
+        });
+      }
+      
       return res.status(200).json({ 
         success: true, 
         server
@@ -184,7 +243,7 @@ async function handleGetServersOrTokens(req, res) {
     
   } catch (error) {
     console.error('Error fetching data:', error);
-    res.status(500).json({ 
+    return res.status(500).json({ 
       success: false, 
       error: 'Failed to fetch data: ' + error.message 
     });
@@ -192,20 +251,19 @@ async function handleGetServersOrTokens(req, res) {
 }
 
 // Update server handler
-async function handleUpdateServer(req, res) {
+async function handleUpdateServer(req, res, userId) {
   try {
     const { 
       serverId, 
       name, 
       description, 
-      privacy,
-      userId 
+      privacy
     } = req.body;
     
-    if (!serverId || !userId) {
+    if (!serverId) {
       return res.status(400).json({ 
         success: false, 
-        error: 'Server ID and user ID are required' 
+        error: 'Server ID is required' 
       });
     }
     
@@ -254,7 +312,7 @@ async function handleUpdateServer(req, res) {
     
   } catch (error) {
     console.error('Error updating server:', error);
-    res.status(500).json({ 
+    return res.status(500).json({ 
       success: false, 
       error: 'Failed to update server: ' + error.message 
     });
@@ -262,16 +320,9 @@ async function handleUpdateServer(req, res) {
 }
 
 // Delete handler for servers or tokens
-async function handleDelete(req, res) {
+async function handleDelete(req, res, userId) {
   try {
-    const { serverId, tokenId, userId } = req.body;
-    
-    if (!userId) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'User ID is required' 
-      });
-    }
+    const { serverId, tokenId } = req.body;
     
     if (serverId) {
       // Delete server
@@ -322,7 +373,7 @@ async function handleDelete(req, res) {
     
   } catch (error) {
     console.error('Error deleting:', error);
-    res.status(500).json({ 
+    return res.status(500).json({ 
       success: false, 
       error: 'Failed to delete: ' + error.message 
     });
