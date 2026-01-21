@@ -30,5 +30,11 @@
   "devDependencies": {},
   "engines": {
     "node": ">=18.0.0"
+  },
+  "type": "module",
+  "exports": {
+    ".": "./index.js",
+    "./api/*.mjs": "./api/*.mjs",
+    "./api/*.js": "./api/*.cjs"
   }
 }
