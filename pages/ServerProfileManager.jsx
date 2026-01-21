@@ -18,7 +18,7 @@ import {
   FaGem, FaHatWizard, FaHelicopter, FaIceCream, FaJedi,
   FaMoon, FaPastafarianism, FaRainbow,
   FaSkullCrossbones, FaSnowflake, FaSun, FaTheaterMasks,
-  FaUfo, FaVolcano, FaWind, FaPaintBrush
+  FaUfo, FaVolcano, FaWind, FaPaintBrush, FaHashtag  // <-- ADDED FaHashtag
 } from 'react-icons/fa';
 import { SiJsonwebtokens } from 'react-icons/si';
 
@@ -998,84 +998,81 @@ const ServerProfileManager = () => {
       )}
       
       {/* Global Styles */}
-      <style jsx global>{`
-        @keyframes gradient {
-          0%, 100% { background-position: 0% 50%; }
-          50% { background-position: 100% 50%; }
-        }
-        
-        @keyframes float {
-          0%, 100% { transform: translateY(0px) rotate(0deg); }
-          50% { transform: translateY(-30px) rotate(180deg); }
-        }
-        
-        @keyframes pulse-glow {
-          0%, 100% { 
-            opacity: 0.5;
-            filter: blur(5px);
-          }
-          50% { 
-            opacity: 1;
-            filter: blur(10px);
-          }
-        }
-        
-        @keyframes shimmer {
-          0% { transform: translateX(-100%); }
-          100% { transform: translateX(100%); }
-        }
-        
-        .animate-float {
-          animation: float 6s ease-in-out infinite;
-        }
-        
-        .animate-pulse-glow {
-          animation: pulse-glow 2s ease-in-out infinite;
-        }
-        
-        .animate-shimmer {
-          animation: shimmer 2s infinite;
-        }
-        
-        /* Custom scrollbar */
-        ::-webkit-scrollbar {
-          width: 16px;
-          background: transparent;
-        }
-        
-        ::-webkit-scrollbar-track {
-          background: ${currentPalette.bg};
-          border-radius: 20px;
-          border: 2px solid ${currentPalette.primary[0]};
-        }
-        
-        ::-webkit-scrollbar-thumb {
-          background: linear-gradient(135deg, ${currentPalette.primary[0]}, ${currentPalette.primary[1]});
-          border-radius: 20px;
-          border: 3px solid ${currentPalette.accent[0]};
-          box-shadow: 0 0 20px ${currentPalette.primary[0]};
-        }
-        
-        ::-webkit-scrollbar-thumb:hover {
-          background: linear-gradient(135deg, ${currentPalette.primary[1]}, ${currentPalette.primary[2]});
-          box-shadow: 0 0 30px ${currentPalette.primary[1]};
-        }
-        
-        /* Selection color */
-        ::selection {
-          background: ${currentPalette.primary[0]}80;
-          color: white;
-          text-shadow: 0 0 10px white;
-        }
-        
-        /* Smooth transitions */
-        * {
-          transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55) !important;
-        }
-      `}</style>
-    </div>
-  );
-};
+<style jsx global>{`
+  @keyframes gradient {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+  }
+  
+  @keyframes float {
+    0%, 100% { transform: translateY(0px) rotate(0deg); }
+    50% { transform: translateY(-30px) rotate(180deg); }
+  }
+  
+  @keyframes pulse-glow {
+    0%, 100% { 
+      opacity: 0.5;
+      filter: blur(5px);
+    }
+    50% { 
+      opacity: 1;
+      filter: blur(10px);
+    }
+  }
+  
+  @keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+  
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
+  }
+  
+  .animate-pulse-glow {
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+  
+  .animate-shimmer {
+    animation: shimmer 2s infinite;
+  }
+  
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 16px;
+    background: transparent;
+  }
+  
+  ::-webkit-scrollbar-track {
+    background: ${currentPalette.bg};
+    border-radius: 20px;
+    border: 2px solid ${currentPalette.primary[0]};
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    background: linear-gradient(135deg, ${currentPalette.primary[0]}, ${currentPalette.primary[1]});
+    border-radius: 20px;
+    border: 3px solid ${currentPalette.accent[0]};
+    box-shadow: 0 0 20px ${currentPalette.primary[0]};
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(135deg, ${currentPalette.primary[1]}, ${currentPalette.primary[2]});
+    box-shadow: 0 0 30px ${currentPalette.primary[1]};
+  }
+  
+  /* Selection color */
+  ::selection {
+    background: ${currentPalette.primary[0]}80;
+    color: white;
+    text-shadow: 0 0 10px white;
+  }
+  
+  /* Smooth transitions */
+  * {
+    transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55) !important;
+  }
+`}</style>
 
 // Server Card Component - PURE COLOR EXPLOSION
 const ServerCard = ({ server, index, colorPalette, onEdit, onDelete }) => {
@@ -1802,29 +1799,201 @@ const CreateServerModal = ({ form, onChange, onSubmit, onClose, colorPalette }) 
   );
 };
 
-// Token Card Component (similar pattern as ServerCard)
+// Token Card Component
 const TokenCard = ({ token, index, colorPalette }) => {
+  const [copied, setCopied] = useState(false);
+  
+  const copyToken = async () => {
+    if (token.token) {
+      await navigator.clipboard.writeText(token.token);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+  
   return (
     <motion.div
       initial={{ opacity: 0, y: 60 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.1, type: "spring" }}
     >
-      <div className="relative rounded-5xl p-12" style={{
-        background: `linear-gradient(135deg, ${colorPalette.secondary[0]}30, ${colorPalette.secondary[1]}20, ${colorPalette.secondary[2]}10)`,
-        border: `6px solid ${colorPalette.secondary[3]}`,
-        boxShadow: `
-          0 0 80px ${colorPalette.secondary[0]},
-          0 0 160px ${colorPalette.secondary[1]},
-          inset 0 0 80px ${colorPalette.secondary[2]}
-        `
-      }}>
-        {/* Token content here */}
-      </div>
+      <ParallaxTilt
+        tiltMaxAngleX={15}
+        tiltMaxAngleY={15}
+        scale={1.05}
+        glareEnable={true}
+        glareMaxOpacity={0.8}
+        glareColor={colorPalette.secondary[0]}
+        className="relative"
+      >
+        <div className="relative rounded-5xl p-12 overflow-hidden group">
+          {/* Animated Background */}
+          <motion.div 
+            animate={{ 
+              backgroundPosition: ["0% 0%", "100% 100%", "0% 0%"]
+            }}
+            transition={{ duration: 10, repeat: Infinity }}
+            className="absolute inset-0"
+            style={{
+              background: `linear-gradient(135deg, 
+                ${colorPalette.secondary[0]}30, 
+                ${colorPalette.secondary[1]}30, 
+                ${colorPalette.secondary[2]}30, 
+                ${colorPalette.secondary[3]}30
+              )`,
+              backgroundSize: '400% 400%'
+            }}
+          />
+          
+          {/* Pulsing Border */}
+          <motion.div
+            animate={{ 
+              borderColor: colorPalette.secondary,
+              boxShadow: [
+                `0 0 40px ${colorPalette.secondary[0]}, inset 0 0 40px ${colorPalette.accent[0]}`,
+                `0 0 80px ${colorPalette.secondary[1]}, inset 0 0 80px ${colorPalette.accent[1]}`,
+                `0 0 40px ${colorPalette.secondary[0]}, inset 0 0 40px ${colorPalette.accent[0]}`
+              ]
+            }}
+            transition={{ duration: 3, repeat: Infinity }}
+            className="absolute inset-0 rounded-5xl border-4"
+            style={{ borderColor: colorPalette.secondary[0] }}
+          />
+          
+          {/* Content */}
+          <div className="relative z-10">
+            <div className="flex items-start justify-between mb-12">
+              <div className="flex items-center space-x-8">
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+                  className="p-8 rounded-3xl flex-shrink-0"
+                  style={{
+                    background: `linear-gradient(135deg, ${colorPalette.secondary[0]}40, ${colorPalette.secondary[1]}20)`,
+                    border: `3px solid ${colorPalette.secondary[2]}`,
+                    boxShadow: `0 0 40px ${colorPalette.secondary[2]}`
+                  }}
+                >
+                  <SiJsonwebtokens className="text-5xl" style={{ color: colorPalette.secondary[3] }} />
+                </motion.div>
+                
+                <div>
+                  <h3 className="text-4xl font-black mb-4" style={{ 
+                    color: colorPalette.secondary[0],
+                    textShadow: `0 0 20px ${colorPalette.secondary[0]}`
+                  }}>
+                    {token.table_name || 'QUANTUM TOKEN'}
+                  </h3>
+                  <div className="flex flex-wrap gap-4">
+                    <span className="px-6 py-3 rounded-full text-lg font-black flex items-center space-x-3"
+                      style={{
+                        background: `linear-gradient(135deg, ${colorPalette.secondary[1]}, ${colorPalette.secondary[2]})`,
+                        border: `2px solid ${colorPalette.secondary[3]}`,
+                        boxShadow: `0 0 30px ${colorPalette.secondary[1]}`,
+                        color: 'white'
+                      }}
+                    >
+                      <FaDatabase />
+                      <span>{token.table_name || 'UNKNOWN'}</span>
+                    </span>
+                    
+                    <span className="px-6 py-3 rounded-full text-lg font-black flex items-center space-x-3"
+                      style={{
+                        background: `linear-gradient(135deg, ${colorPalette.accent[0]}, ${colorPalette.accent[1]})`,
+                        border: `2px solid ${colorPalette.accent[2]}`,
+                        boxShadow: `0 0 30px ${colorPalette.accent[0]}`,
+                        color: 'white'
+                      }}
+                    >
+                      <FaKey />
+                      <span>ID: {token.record_id || 'N/A'}</span>
+                    </span>
+                  </div>
+                </div>
+              </div>
+              
+              <motion.button
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={copyToken}
+                className="p-6 rounded-3xl flex items-center space-x-4"
+                style={{
+                  background: `linear-gradient(135deg, ${colorPalette.secondary[0]}40, ${colorPalette.secondary[1]}20)`,
+                  border: `3px solid ${colorPalette.secondary[2]}`,
+                  boxShadow: `0 0 40px ${colorPalette.secondary[0]}`,
+                  color: copied ? colorPalette.secondary[3] : colorPalette.secondary[2]
+                }}
+              >
+                {copied ? <FaCheck /> : <FaCopy />}
+                <span className="text-xl font-black">{copied ? 'COPIED!' : 'COPY'}</span>
+              </motion.button>
+            </div>
+            
+            {/* Token Value */}
+            <div className="mb-12">
+              <div className="relative group">
+                <div className="p-8 rounded-4xl overflow-hidden" style={{
+                  background: `linear-gradient(135deg, ${colorPalette.primary[0]}20, ${colorPalette.primary[1]}10)`,
+                  border: `3px solid ${colorPalette.primary[2]}`,
+                  boxShadow: `0 0 40px ${colorPalette.primary[0]}`
+                }}>
+                  <code className="text-2xl font-mono break-all" style={{ color: colorPalette.secondary[0] }}>
+                    {token.token || 'No token generated'}
+                  </code>
+                </div>
+              </div>
+            </div>
+            
+            {/* Metadata */}
+            <div className="grid grid-cols-3 gap-8">
+              <div className="p-6 rounded-4xl" style={{
+                background: `linear-gradient(135deg, ${colorPalette.secondary[0]}30, ${colorPalette.secondary[1]}20)`,
+                border: `2px solid ${colorPalette.secondary[2]}`,
+                boxShadow: `0 0 30px ${colorPalette.secondary[0]}`
+              }}>
+                <div className="text-lg mb-2 flex items-center space-x-3" style={{ color: colorPalette.accent[0] }}>
+                  <FaClock />
+                  <span className="font-black">CREATED</span>
+                </div>
+                <div className="text-xl font-black" style={{ color: colorPalette.secondary[0] }}>
+                  {new Date(token.created_at).toLocaleDateString()}
+                </div>
+              </div>
+              
+              <div className="p-6 rounded-4xl" style={{
+                background: `linear-gradient(135deg, ${colorPalette.secondary[1]}30, ${colorPalette.secondary[2]}20)`,
+                border: `2px solid ${colorPalette.secondary[3]}`,
+                boxShadow: `0 0 30px ${colorPalette.secondary[1]}`
+              }}>
+                <div className="text-lg mb-2 flex items-center space-x-3" style={{ color: colorPalette.accent[1] }}>
+                  <FaClock className="animate-pulse" />
+                  <span className="font-black">EXPIRES</span>
+                </div>
+                <div className="text-xl font-black" style={{ color: colorPalette.secondary[1] }}>
+                  {token.expires_at ? new Date(token.expires_at).toLocaleDateString() : 'NEVER'}
+                </div>
+              </div>
+              
+              <div className="p-6 rounded-4xl" style={{
+                background: `linear-gradient(135deg, ${colorPalette.secondary[2]}30, ${colorPalette.secondary[3]}20)`,
+                border: `2px solid ${colorPalette.secondary[4]}`,
+                boxShadow: `0 0 30px ${colorPalette.secondary[2]}`
+              }}>
+                <div className="text-lg mb-2 flex items-center space-x-3" style={{ color: colorPalette.accent[2] }}>
+                  <FaShieldAlt />
+                  <span className="font-black">PERMISSIONS</span>
+                </div>
+                <div className="text-xl font-black" style={{ color: colorPalette.secondary[2] }}>
+                  {token.permissions ? Object.keys(token.permissions).filter(k => token.permissions[k]).length : 0}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </ParallaxTilt>
     </motion.div>
   );
-}; 
-
+};
 // Edit Server Modal Component
 const EditServerModal = ({ form, onChange, onSubmit, onClose, colorPalette }) => {
   return (
@@ -1869,7 +2038,16 @@ const EditServerModal = ({ form, onChange, onSubmit, onClose, colorPalette }) =>
 const TokenModal = ({ form, onChange, onSubmit, onClose, colorPalette }) => {
   return (
     <div className="fixed inset-0 z-[999] flex items-center justify-center p-10">
-      <div className="absolute inset-0 backdrop-blur-4xl" style={{ background: colorPalette.bg }} onClick={onClose} />
+      {/* Backdrop */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="absolute inset-0 backdrop-blur-4xl"
+        style={{ background: colorPalette.bg }}
+        onClick={onClose}
+      />
+      
+      {/* Modal Content */}
       <motion.div
         initial={{ scale: 0.8, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
@@ -1881,28 +2059,198 @@ const TokenModal = ({ form, onChange, onSubmit, onClose, colorPalette }) => {
         }}
         onClick={e => e.stopPropagation()}
       >
-        <h2 className="text-6xl font-black mb-8" style={{ color: colorPalette.primary[0] }}>
-          GENERATE TOKEN
-        </h2>
-        {/* Add your token form here */}
-        <div className="flex space-x-8 mt-12">
-          <button onClick={onClose} className="px-10 py-6 rounded-4xl text-2xl font-black" style={{
-            background: `linear-gradient(135deg, ${colorPalette.primary[5]}40, ${colorPalette.primary[6]}20)`,
-            border: `4px solid ${colorPalette.primary[7]}`,
-            color: colorPalette.primary[5]
-          }}>
-            CANCEL
-          </button>
-          <button onClick={onSubmit} className="px-10 py-6 rounded-4xl text-2xl font-black" style={{
-            background: `linear-gradient(135deg, ${colorPalette.primary[0]}, ${colorPalette.primary[1]})`,
-            color: 'white'
-          }}>
-            GENERATE TOKEN
-          </button>
+        <div className="flex items-center justify-between mb-16">
+          <div className="flex items-center space-x-10">
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+              className="p-10 rounded-4xl"
+              style={{
+                background: `linear-gradient(135deg, ${colorPalette.primary[0]}40, ${colorPalette.primary[1]}20)`,
+                border: `4px solid ${colorPalette.primary[2]}`,
+                boxShadow: `0 0 60px ${colorPalette.primary[0]}`
+              }}
+            >
+              <FaKey className="text-7xl" style={{ color: colorPalette.primary[3] }} />
+            </motion.div>
+            
+            <div>
+              <h2 className="text-7xl font-black mb-6 tracking-tighter" style={{
+                background: `linear-gradient(135deg, ${colorPalette.primary[0]}, ${colorPalette.primary[1]}, ${colorPalette.primary[2]})`,
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                textShadow: `0 0 40px ${colorPalette.primary[0]}`
+              }}>
+                GENERATE TOKEN
+              </h2>
+              <p className="text-3xl flex items-center space-x-6" style={{ color: colorPalette.secondary[0] }}>
+                <SiJsonwebtokens className="animate-spin" style={{ animationDuration: '6s' }} />
+                <span>Create quantum access token</span>
+              </p>
+            </div>
+          </div>
+          
+          <motion.button
+            whileHover={{ scale: 1.1, rotate: 90 }}
+            whileTap={{ scale: 0.9 }}
+            onClick={onClose}
+            className="p-6 rounded-3xl"
+            style={{
+              background: `linear-gradient(135deg, ${colorPalette.primary[0]}40, ${colorPalette.primary[1]}20)`,
+              border: `3px solid ${colorPalette.primary[2]}`,
+              boxShadow: `0 0 40px ${colorPalette.primary[0]}`
+            }}
+          >
+            <FaTimes className="text-4xl" style={{ color: colorPalette.primary[3] }} />
+          </motion.button>
+        </div>
+        
+        {/* Form Fields */}
+        <div className="space-y-12">
+          <div>
+            <label className="block text-3xl font-black mb-8 flex items-center space-x-6">
+              <FaDatabase className="text-4xl" style={{ color: colorPalette.primary[0] }} />
+              <span style={{ color: colorPalette.primary[0] }}>TABLE NAME</span>
+            </label>
+            <input
+              type="text"
+              value={form.table_name}
+              onChange={(e) => onChange({...form, table_name: e.target.value})}
+              className="w-full rounded-4xl px-10 py-8 text-3xl focus:outline-none"
+              placeholder="Enter table name..."
+              style={{
+                background: `linear-gradient(135deg, ${colorPalette.primary[0]}20, ${colorPalette.primary[1]}10)`,
+                border: `4px solid ${colorPalette.primary[2]}`,
+                color: colorPalette.secondary[0],
+                boxShadow: `0 0 40px ${colorPalette.primary[0]}`,
+                fontSize: '2rem'
+              }}
+            />
+          </div>
+          
+          <div>
+            <label className="block text-3xl font-black mb-8 flex items-center space-x-6">
+              <FaHashtag className="text-4xl" style={{ color: colorPalette.primary[1] }} />
+              <span style={{ color: colorPalette.primary[1] }}>RECORD ID</span>
+            </label>
+            <input
+              type="text"
+              value={form.record_id}
+              onChange={(e) => onChange({...form, record_id: e.target.value})}
+              className="w-full rounded-4xl px-10 py-8 text-3xl focus:outline-none"
+              placeholder="Enter record ID..."
+              style={{
+                background: `linear-gradient(135deg, ${colorPalette.primary[1]}20, ${colorPalette.primary[2]}10)`,
+                border: `4px solid ${colorPalette.primary[3]}`,
+                color: colorPalette.secondary[1],
+                boxShadow: `0 0 40px ${colorPalette.primary[1]}`,
+                fontSize: '2rem'
+              }}
+            />
+          </div>
+          
+          {/* Permissions Section */}
+          <div className="grid grid-cols-2 gap-12">
+            {Object.entries(form.permissions || {}).map(([perm, value], i) => (
+              <div key={perm} className="flex items-center space-x-6 p-8 rounded-4xl" style={{
+                background: `linear-gradient(135deg, ${colorPalette.primary[i]}20, ${colorPalette.primary[i+1]}10)`,
+                border: `4px solid ${colorPalette.primary[i+2]}`,
+                boxShadow: `0 0 40px ${colorPalette.primary[i]}`
+              }}>
+                <input
+                  type="checkbox"
+                  id={`perm-${perm}`}
+                  checked={value}
+                  onChange={(e) => onChange({
+                    ...form, 
+                    permissions: {...form.permissions, [perm]: e.target.checked}
+                  })}
+                  className="w-10 h-10 rounded-xl cursor-pointer"
+                  style={{
+                    background: value 
+                      ? `linear-gradient(135deg, ${colorPalette.primary[i]}, ${colorPalette.primary[i+1]})`
+                      : `linear-gradient(135deg, ${colorPalette.primary[i+2]}20, ${colorPalette.primary[i+3]}10)`,
+                    border: `3px solid ${colorPalette.primary[i+4]}`,
+                    boxShadow: `0 0 20px ${colorPalette.primary[i]}`
+                  }}
+                />
+                <label htmlFor={`perm-${perm}`} className="cursor-pointer flex-1">
+                  <div className="text-3xl font-black" style={{ color: colorPalette.primary[i] }}>
+                    {perm.toUpperCase()}
+                  </div>
+                </label>
+                {value ? (
+                  <FaCheck className="text-4xl" style={{ color: colorPalette.primary[i+1] }} />
+                ) : (
+                  <FaTimes className="text-4xl" style={{ color: colorPalette.primary[i+2] }} />
+                )}
+              </div>
+            ))}
+          </div>
+          
+          {/* Expiration */}
+          <div>
+            <label className="block text-3xl font-black mb-8 flex items-center space-x-6">
+              <FaClock className="text-4xl" style={{ color: colorPalette.primary[2] }} />
+              <span style={{ color: colorPalette.primary[2] }}>EXPIRES IN (HOURS)</span>
+              <span className="ml-auto text-4xl font-black" style={{ color: colorPalette.accent[0] }}>
+                {form.expires_in_hours}h
+              </span>
+            </label>
+            <input
+              type="range"
+              min="1"
+              max="720"
+              value={form.expires_in_hours}
+              onChange={(e) => onChange({...form, expires_in_hours: parseInt(e.target.value)})}
+              className="w-full h-6 rounded-full appearance-none"
+              style={{
+                background: `linear-gradient(90deg, ${colorPalette.primary[2]}, ${colorPalette.primary[3]}, ${colorPalette.primary[4]})`,
+                boxShadow: `0 0 30px ${colorPalette.primary[2]}`,
+                WebkitAppearance: 'none'
+              }}
+            />
+          </div>
+        </div>
+        
+        {/* Actions */}
+        <div className="flex space-x-12 mt-24">
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={onClose}
+            className="flex-1 px-12 py-10 rounded-5xl text-3xl font-black flex items-center justify-center space-x-6 group"
+            style={{
+              background: `linear-gradient(135deg, ${colorPalette.primary[5]}40, ${colorPalette.primary[6]}20)`,
+              border: `4px solid ${colorPalette.primary[7]}`,
+              boxShadow: `0 0 50px ${colorPalette.primary[5]}`,
+              color: colorPalette.primary[5]
+            }}
+          >
+            <FaTimes className="text-4xl group-hover:rotate-90 transition-transform" />
+            <span>CANCEL</span>
+          </motion.button>
+          
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={onSubmit}
+            className="flex-1 px-12 py-10 rounded-5xl text-3xl font-black flex items-center justify-center space-x-6 group relative overflow-hidden"
+            style={{
+              background: `linear-gradient(135deg, ${colorPalette.primary[0]}, ${colorPalette.primary[1]}, ${colorPalette.primary[2]})`,
+              border: `4px solid ${colorPalette.primary[3]}`,
+              boxShadow: `0 0 80px ${colorPalette.primary[0]}`,
+              color: 'white'
+            }}
+          >
+            <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/40 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
+            <FaKey className="text-5xl group-hover:animate-bounce" />
+            <span>GENERATE TOKEN</span>
+            <FaSparkles className="text-5xl animate-pulse" />
+          </motion.button>
         </div>
       </motion.div>
     </div>
   );
 };
-
 export default ServerProfileManager;
