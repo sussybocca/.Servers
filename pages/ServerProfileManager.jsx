@@ -1820,6 +1820,84 @@ const TokenCard = ({ token, index, colorPalette }) => {
       </div>
     </motion.div>
   );
+}; 
+// Edit Server Modal Component
+const EditServerModal = ({ form, onChange, onSubmit, onClose, colorPalette }) => {
+  return (
+    <div className="fixed inset-0 z-[999] flex items-center justify-center p-10">
+      <div className="absolute inset-0 backdrop-blur-4xl" style={{ background: colorPalette.bg }} onClick={onClose} />
+      <motion.div
+        initial={{ scale: 0.8, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        className="relative rounded-6xl p-16 w-full max-w-5xl"
+        style={{
+          background: colorPalette.bg,
+          border: `8px solid ${colorPalette.primary[0]}`,
+          boxShadow: `0 0 100px ${colorPalette.primary[0]}`
+        }}
+        onClick={e => e.stopPropagation()}
+      >
+        <h2 className="text-6xl font-black mb-8" style={{ color: colorPalette.primary[0] }}>
+          EDIT SERVER
+        </h2>
+        {/* Add your edit form here */}
+        <div className="flex space-x-8 mt-12">
+          <button onClick={onClose} className="px-10 py-6 rounded-4xl text-2xl font-black" style={{
+            background: `linear-gradient(135deg, ${colorPalette.primary[5]}40, ${colorPalette.primary[6]}20)`,
+            border: `4px solid ${colorPalette.primary[7]}`,
+            color: colorPalette.primary[5]
+          }}>
+            CANCEL
+          </button>
+          <button onClick={onSubmit} className="px-10 py-6 rounded-4xl text-2xl font-black" style={{
+            background: `linear-gradient(135deg, ${colorPalette.primary[0]}, ${colorPalette.primary[1]})`,
+            color: 'white'
+          }}>
+            UPDATE SERVER
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
 };
 
+// Token Modal Component
+const TokenModal = ({ form, onChange, onSubmit, onClose, colorPalette }) => {
+  return (
+    <div className="fixed inset-0 z-[999] flex items-center justify-center p-10">
+      <div className="absolute inset-0 backdrop-blur-4xl" style={{ background: colorPalette.bg }} onClick={onClose} />
+      <motion.div
+        initial={{ scale: 0.8, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        className="relative rounded-6xl p-16 w-full max-w-5xl"
+        style={{
+          background: colorPalette.bg,
+          border: `8px solid ${colorPalette.primary[0]}`,
+          boxShadow: `0 0 100px ${colorPalette.primary[0]}`
+        }}
+        onClick={e => e.stopPropagation()}
+      >
+        <h2 className="text-6xl font-black mb-8" style={{ color: colorPalette.primary[0] }}>
+          GENERATE TOKEN
+        </h2>
+        {/* Add your token form here */}
+        <div className="flex space-x-8 mt-12">
+          <button onClick={onClose} className="px-10 py-6 rounded-4xl text-2xl font-black" style={{
+            background: `linear-gradient(135deg, ${colorPalette.primary[5]}40, ${colorPalette.primary[6]}20)`,
+            border: `4px solid ${colorPalette.primary[7]}`,
+            color: colorPalette.primary[5]
+          }}>
+            CANCEL
+          </button>
+          <button onClick={onSubmit} className="px-10 py-6 rounded-4xl text-2xl font-black" style={{
+            background: `linear-gradient(135deg, ${colorPalette.primary[0]}, ${colorPalette.primary[1]})`,
+            color: 'white'
+          }}>
+            GENERATE TOKEN
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+};
 export default ServerProfileManager;
