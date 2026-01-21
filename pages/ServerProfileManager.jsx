@@ -11,14 +11,14 @@ import {
   FaGamepad, FaVrCardboard, FaBrain, FaAtom, FaMeteor, FaShapes,
   FaCube, FaRing, FaCrosshairs, FaLayerGroup, FaInfinity, FaWaveSquare,
   FaSparkles, FaFire, FaWater, FaMountain, FaSpaceShuttle, FaSatelliteDish,
-  FaChartLine, FaMicrochip, FaCodeBranch, FaEllipsisH,
+  FaChartLine, FaMicrochip, FaCodeBranch, FaEllipsisH, FaHashtag,
   FaRegMoon, FaRegSun, FaRegStar, FaRegCompass, FaTimes,
   FaExpand, FaVolumeUp, FaPalette,
   FaBomb, FaCrown, FaDragon, FaFireAlt, FaFish, FaFrog,
   FaGem, FaHatWizard, FaHelicopter, FaIceCream, FaJedi,
   FaMoon, FaPastafarianism, FaRainbow,
   FaSkullCrossbones, FaSnowflake, FaSun, FaTheaterMasks,
-  FaUfo, FaVolcano, FaWind, FaPaintBrush, FaHashtag  // <-- ADDED FaHashtag
+  FaUfo, FaVolcano, FaWind, FaPaintBrush
 } from 'react-icons/fa';
 import { SiJsonwebtokens } from 'react-icons/si';
 
@@ -216,11 +216,13 @@ const ServerProfileManager = () => {
     
     // Animation loop
     let time = 0;
-    const animate = () => {
+    let lastTime = 0;
+    const animate = (currentTime) => {
       rafRef.current = requestAnimationFrame(animate);
       
-      const delta = performance.now() - (rafRef.current || 0);
+      const delta = currentTime - lastTime;
       if (delta < frameInterval) return;
+      lastTime = currentTime;
       
       time += 0.01;
       
@@ -998,81 +1000,84 @@ const ServerProfileManager = () => {
       )}
       
       {/* Global Styles */}
-<style jsx global>{`
-  @keyframes gradient {
-    0%, 100% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-  }
-  
-  @keyframes float {
-    0%, 100% { transform: translateY(0px) rotate(0deg); }
-    50% { transform: translateY(-30px) rotate(180deg); }
-  }
-  
-  @keyframes pulse-glow {
-    0%, 100% { 
-      opacity: 0.5;
-      filter: blur(5px);
-    }
-    50% { 
-      opacity: 1;
-      filter: blur(10px);
-    }
-  }
-  
-  @keyframes shimmer {
-    0% { transform: translateX(-100%); }
-    100% { transform: translateX(100%); }
-  }
-  
-  .animate-float {
-    animation: float 6s ease-in-out infinite;
-  }
-  
-  .animate-pulse-glow {
-    animation: pulse-glow 2s ease-in-out infinite;
-  }
-  
-  .animate-shimmer {
-    animation: shimmer 2s infinite;
-  }
-  
-  /* Custom scrollbar */
-  ::-webkit-scrollbar {
-    width: 16px;
-    background: transparent;
-  }
-  
-  ::-webkit-scrollbar-track {
-    background: ${currentPalette.bg};
-    border-radius: 20px;
-    border: 2px solid ${currentPalette.primary[0]};
-  }
-  
-  ::-webkit-scrollbar-thumb {
-    background: linear-gradient(135deg, ${currentPalette.primary[0]}, ${currentPalette.primary[1]});
-    border-radius: 20px;
-    border: 3px solid ${currentPalette.accent[0]};
-    box-shadow: 0 0 20px ${currentPalette.primary[0]};
-  }
-  
-  ::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(135deg, ${currentPalette.primary[1]}, ${currentPalette.primary[2]});
-    box-shadow: 0 0 30px ${currentPalette.primary[1]};
-  }
-  
-  /* Selection color */
-  ::selection {
-    background: ${currentPalette.primary[0]}80;
-    color: white;
-    text-shadow: 0 0 10px white;
-  }
-  
-  /* Smooth transitions */
-  * {
-    transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55) !important;
-  }
-`}</style>
+      <style jsx global>{`
+        @keyframes gradient {
+          0%, 100% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+        }
+        
+        @keyframes float {
+          0%, 100% { transform: translateY(0px) rotate(0deg); }
+          50% { transform: translateY(-30px) rotate(180deg); }
+        }
+        
+        @keyframes pulse-glow {
+          0%, 100% { 
+            opacity: 0.5;
+            filter: blur(5px);
+          }
+          50% { 
+            opacity: 1;
+            filter: blur(10px);
+          }
+        }
+        
+        @keyframes shimmer {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(100%); }
+        }
+        
+        .animate-float {
+          animation: float 6s ease-in-out infinite;
+        }
+        
+        .animate-pulse-glow {
+          animation: pulse-glow 2s ease-in-out infinite;
+        }
+        
+        .animate-shimmer {
+          animation: shimmer 2s infinite;
+        }
+        
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+          width: 16px;
+          background: transparent;
+        }
+        
+        ::-webkit-scrollbar-track {
+          background: ${currentPalette.bg};
+          border-radius: 20px;
+          border: 2px solid ${currentPalette.primary[0]};
+        }
+        
+        :: webkit-scrollbar-thumb {
+          background: linear-gradient(135deg, ${currentPalette.primary[0]}, ${currentPalette.primary[1]});
+          border-radius: 20px;
+          border: 3px solid ${currentPalette.accent[0]};
+          box-shadow: 0 0 20px ${currentPalette.primary[0]};
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+          background: linear-gradient(135deg, ${currentPalette.primary[1]}, ${currentPalette.primary[2]});
+          box-shadow: 0 0 30px ${currentPalette.primary[1]};
+        }
+        
+        /* Selection color */
+        ::selection {
+          background: ${currentPalette.primary[0]}80;
+          color: white;
+          text-shadow: 0 0 10px white;
+        }
+        
+        /* Smooth transitions */
+        * {
+          transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55) !important;
+        }
+      `}</style>
+    </div>
+  );
+};
 
 // Server Card Component - PURE COLOR EXPLOSION
 const ServerCard = ({ server, index, colorPalette, onEdit, onDelete }) => {
@@ -1994,6 +1999,7 @@ const TokenCard = ({ token, index, colorPalette }) => {
     </motion.div>
   );
 };
+
 // Edit Server Modal Component
 const EditServerModal = ({ form, onChange, onSubmit, onClose, colorPalette }) => {
   return (
@@ -2253,4 +2259,5 @@ const TokenModal = ({ form, onChange, onSubmit, onClose, colorPalette }) => {
     </div>
   );
 };
+
 export default ServerProfileManager;
