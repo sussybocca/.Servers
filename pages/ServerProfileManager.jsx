@@ -1,6 +1,6 @@
 // components/ServerProfileManager.jsx
 import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence, useMotionValue, useSpring } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import ParallaxTilt from 'react-parallax-tilt';
 import * as THREE from 'three';
 import { 
@@ -13,17 +13,25 @@ import {
   FaSparkles, FaFire, FaWater, FaMountain, FaSpaceShuttle, FaSatelliteDish,
   FaChartLine, FaMicrochip, FaCodeBranch, FaEllipsisH,
   FaRegMoon, FaRegSun, FaRegStar, FaRegCompass, FaTimes,
-  FaExpand, FaVolumeUp, FaPalette, FaGamepad, FaBrain,
+  FaExpand, FaVolumeUp, FaPalette,
   FaBomb, FaCrown, FaDragon, FaFireAlt, FaFish, FaFrog,
   FaGem, FaHatWizard, FaHelicopter, FaIceCream, FaJedi,
-  FaMagic, FaMeteor, FaMoon, FaPastafarianism, FaRainbow,
-  FaRobot, FaSkullCrossbones, FaSnowflake, FaSun, FaTheaterMasks,
-  FaUfo, FaVolcano, FaWind, FaPaintBrush, FaRainbow as FaRainbowIcon,
-  FaPalette as FaPaletteIcon, FaFire as FaFireIcon, FaFish as FaFishIcon,
-  FaDragon as FaDragonIcon, FaCrown as FaCrownIcon, FaMeteor as FaMeteorIcon,
-  FaSpaceShuttle as FaSpaceShuttleIcon, FaAtom as FaAtomIcon
+  FaMoon, FaPastafarianism, FaRainbow,
+  FaSkullCrossbones, FaSnowflake, FaSun, FaTheaterMasks,
+  FaUfo, FaVolcano, FaWind, FaPaintBrush
 } from 'react-icons/fa';
 import { SiJsonwebtokens } from 'react-icons/si';
+
+// Create aliases for icons that need different names
+const FaRainbowIcon = FaRainbow;
+const FaPaletteIcon = FaPalette;
+const FaFireIcon = FaFire;
+const FaFishIcon = FaFish;
+const FaDragonIcon = FaDragon;
+const FaCrownIcon = FaCrown;
+const FaMeteorIcon = FaMeteor;
+const FaSpaceShuttleIcon = FaSpaceShuttle;
+const FaAtomIcon = FaAtom;
 
 // PSYCHEDELIC COLOR PALETTES - ABSOLUTELY ZERO GRAY/BLACK
 const PSYCHEDELIC_PALETTES = {
