@@ -25,7 +25,8 @@
     "bcrypt": "5.1.1",
     "crypto": "1.0.1",
     "uuid": "9.0.1",
-    "nodemailer": "6.9.15"
+    "nodemailer": "6.9.15",
+    "three": "0.182.0"
   },
   "devDependencies": {},
   "engines": {
