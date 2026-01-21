@@ -1,9 +1,10 @@
 // pages/api/create-server.js
 import { createClient } from '@supabase/supabase-js';
 
+// FIX: Remove the ! non-null assertions
 const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_ANON_KEY!
+  process.env.SUPABASE_URL || '',  // Add fallback instead of !
+  process.env.SUPABASE_ANON_KEY || ''  // Add fallback instead of !
 );
 
 // Helper to get user from session
@@ -123,7 +124,7 @@ async function handleCreateServer(req, res, userId) {
 
     // Generate token if requested
     let serverToken = null;
-    if (generateToken && server?.id) {
+    if (generateToken && server && server.id) {
       try {
         const { data: tokenResult } = await supabase
           .rpc('generate_token_link', {
@@ -143,7 +144,7 @@ async function handleCreateServer(req, res, userId) {
     }
 
     // Return response
-    return res.status(200).json({ 
+    const response = { 
       success: true, 
       server: {
         id: server.id,
@@ -153,9 +154,14 @@ async function handleCreateServer(req, res, userId) {
         owner_id: server.owner_id,
         is_public: server.is_public,
         renewal_date: server.renewal_date
-      },
-      ...(serverToken && { token: serverToken })
-    });
+      }
+    };
+    
+    if (serverToken) {
+      response.token = serverToken;
+    }
+    
+    return res.status(200).json(response);
     
   } catch (error) {
     console.error('Error creating server:', error);
@@ -344,7 +350,9 @@ async function handleDelete(req, res, userId) {
         .delete()
         .eq('id', serverId);
       
-      if (error) throw error;
+      if (error) {
+        throw error;
+      }
       
       return res.status(200).json({ 
         success: true, 
@@ -358,7 +366,9 @@ async function handleDelete(req, res, userId) {
         .eq('id', tokenId)
         .eq('user_id', userId);
       
-      if (error) throw error;
+      if (error) {
+        throw error;
+      }
       
       return res.status(200).json({ 
         success: true, 
