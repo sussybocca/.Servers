@@ -379,52 +379,52 @@ const ServerProfileManager = () => {
     setTimeout(() => setMessage({ type: '', text: '' }), 3000);
   };
 
-  const immersiveConfirm = async (title, message) => {
-    return new Promise((resolve) => {
-      const modal = document.createElement('div');
-      modal.className = 'fixed inset-0 z-[9999] flex items-center justify-center';
-      modal.innerHTML = `
-        <div class="absolute inset-0" style="background: ${currentPalette.bg}"></div>
-        <div class="relative z-10 p-12 rounded-4xl max-w-md w-full mx-4" style="
-          background: ${currentPalette.bg};
-          border: 4px solid ${currentPalette.primary[0]};
-          box-shadow: 0 0 100px ${currentPalette.primary[0]};
-        ">
-          <div class="text-center mb-8">
-            <div class="w-32 h-32 mx-auto mb-6 rounded-full flex items-center justify-center animate-pulse" style="
-              border: 4px solid ${currentPalette.primary[1]};
-              box-shadow: 0 0 60px ${currentPalette.primary[1]};
-              background: ${currentPalette.bg};
-            ">
-              <FaBomb class="text-6xl" style="color: ${currentPalette.primary[2]}" />
-            </div>
-            <h3 class="text-4xl font-black mb-4" style="color: ${currentPalette.primary[0]}">${title}</h3>
-            <p class="text-2xl" style="color: ${currentPalette.secondary[0]}">${message}</p>
+ const immersiveConfirm = async (title, message) => {
+  return new Promise((resolve) => {
+    const modal = document.createElement('div');
+    modal.className = 'fixed inset-0 z-[9999] flex items-center justify-center';
+    modal.innerHTML = `
+      <div class="absolute inset-0" style="background: ${currentPalette.bg}"></div>
+      <div class="relative z-10 p-12 rounded-4xl max-w-md w-full mx-4" style="
+        background: ${currentPalette.bg};
+        border: 4px solid ${currentPalette.primary[0]};
+        box-shadow: 0 0 100px ${currentPalette.primary[0]};
+      ">
+        <div class="text-center mb-8">
+          <div class="w-32 h-32 mx-auto mb-6 rounded-full flex items-center justify-center animate-pulse" style="
+            border: 4px solid ${currentPalette.primary[1]};
+            box-shadow: 0 0 60px ${currentPalette.primary[1]};
+            background: ${currentPalette.bg};
+          ">
+            <div class="text-6xl" style="color: ${currentPalette.primary[2]}">💣</div>
           </div>
-          <div class="grid grid-cols-2 gap-6">
-            <button id="confirm-cancel" class="px-8 py-4 rounded-2xl text-2xl font-black transition-all duration-300 hover:scale-105" style="
-              background: ${currentPalette.bg};
-              border: 3px solid ${currentPalette.primary[3]};
-              color: ${currentPalette.primary[3]};
-              box-shadow: 0 0 30px ${currentPalette.primary[3]};
-            ">
-              ABORT
-            </button>
-            <button id="confirm-ok" class="px-8 py-4 rounded-2xl text-2xl font-black transition-all duration-300 hover:scale-105" style="
-              background: linear-gradient(135deg, ${currentPalette.primary[0]}, ${currentPalette.primary[1]});
-              color: white;
-              box-shadow: 0 0 50px ${currentPalette.primary[0]};
-            ">
-              CONFIRM
-            </button>
-          </div>
+          <h3 class="text-4xl font-black mb-4" style="color: ${currentPalette.primary[0]}">${title}</h3>
+          <p class="text-2xl" style="color: ${currentPalette.secondary[0]}">${message}</p>
         </div>
-      `;
-      document.body.appendChild(modal);
-      document.getElementById('confirm-cancel').onclick = () => { modal.remove(); resolve(false); };
-      document.getElementById('confirm-ok').onclick = () => { modal.remove(); resolve(true); };
-    });
-  };
+        <div class="grid grid-cols-2 gap-6">
+          <button id="confirm-cancel" class="px-8 py-4 rounded-2xl text-2xl font-black transition-all duration-300 hover:scale-105" style="
+            background: ${currentPalette.bg};
+            border: 3px solid ${currentPalette.primary[3]};
+            color: ${currentPalette.primary[3]};
+            box-shadow: 0 0 30px ${currentPalette.primary[3]};
+          ">
+            ABORT
+          </button>
+          <button id="confirm-ok" class="px-8 py-4 rounded-2xl text-2xl font-black transition-all duration-300 hover:scale-105" style="
+            background: linear-gradient(135deg, ${currentPalette.primary[0]}, ${currentPalette.primary[1]});
+            color: white;
+            box-shadow: 0 0 50px ${currentPalette.primary[0]};
+          ">
+            CONFIRM
+          </button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+    document.getElementById('confirm-cancel').onclick = () => { modal.remove(); resolve(false); };
+    document.getElementById('confirm-ok').onclick = () => { modal.remove(); resolve(true); };
+  });
+};
 
   if (loading) {
     return (
