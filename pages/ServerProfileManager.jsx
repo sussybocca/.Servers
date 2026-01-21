@@ -1,11 +1,68 @@
 // components/ServerProfileManager.jsx
-import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence, useMotionValue, useSpring } from 'framer-motion';
 import ParallaxTilt from 'react-parallax-tilt';
-import Particles from 'react-tsparticles';
-import { loadSlim } from 'tsparticles-slim';
-import { FaCopy, FaTrash, FaEdit, FaEye, FaKey, FaServer, FaLock, FaUnlock, FaBolt, FaClock, FaLink, FaCheck, FaShieldAlt, FaRocket, FaGlobe, FaDatabase, FaTerminal, FaStar, FaCog, FaNetworkWired, FaCloud } from 'react-icons/fa';
+import * as THREE from 'three';
+import { 
+  FaCopy, FaTrash, FaEdit, FaEye, FaKey, FaServer, FaLock, FaUnlock, 
+  FaBolt, FaClock, FaLink, FaCheck, FaShieldAlt, FaRocket, FaGlobe, 
+  FaDatabase, FaTerminal, FaStar, FaCog, FaNetworkWired, FaCloud, 
+  FaSatellite, FaWifi, FaGhost, FaRobot, FaUserAstronaut, FaMagic,
+  FaGamepad, FaVrCardboard, FaBrain, FaAtom, FaMeteor, FaShapes,
+  FaCube, FaRing, FaCrosshairs, FaLayerGroup, FaInfinity, FaWaveSquare,
+  FaSparkles, FaFire, FaWater, FaMountain, FaSpaceShuttle, FaSatelliteDish,
+  FaChartLine, FaMicrochip, FaCodeBranch, FaEllipsisH,
+  FaRegMoon, FaRegSun, FaRegStar, FaRegCompass, FaTimes,
+  FaExpand, FaVolumeUp, FaPalette, FaGamepad, FaBrain,
+  FaBomb, FaCrown, FaDragon, FaFireAlt, FaFish, FaFrog,
+  FaGem, FaHatWizard, FaHelicopter, FaIceCream, FaJedi,
+  FaMagic, FaMeteor, FaMoon, FaPastafarianism, FaRainbow,
+  FaRobot, FaSkullCrossbones, FaSnowflake, FaSun, FaTheaterMasks,
+  FaUfo, FaVolcano, FaWind, FaPaintBrush, FaRainbow as FaRainbowIcon,
+  FaPalette as FaPaletteIcon, FaFire as FaFireIcon, FaFish as FaFishIcon,
+  FaDragon as FaDragonIcon, FaCrown as FaCrownIcon, FaMeteor as FaMeteorIcon,
+  FaSpaceShuttle as FaSpaceShuttleIcon, FaAtom as FaAtomIcon
+} from 'react-icons/fa';
 import { SiJsonwebtokens } from 'react-icons/si';
+
+// PSYCHEDELIC COLOR PALETTES - ABSOLUTELY ZERO GRAY/BLACK
+const PSYCHEDELIC_PALETTES = {
+  NEON_EXPLOSION: {
+    primary: ['#FF00FF', '#00FFFF', '#FFFF00', '#FF0000', '#00FF00', '#FF8000', '#8000FF', '#00FF80'],
+    secondary: ['#FF00AA', '#AA00FF', '#00FFAA', '#FFAA00', '#00AAFF', '#FF0080', '#80FF00', '#0080FF'],
+    accent: ['#FF0066', '#6600FF', '#00FF66', '#FF6600', '#0066FF', '#FF3300', '#33FF00', '#0033FF'],
+    bg: 'linear-gradient(135deg, #FF00FF10, #00FFFF10, #FFFF0010, #FF000010, #00FF0010)',
+    particle: '#FFFFFF50'
+  },
+  CYBERPUNK_DREAM: {
+    primary: ['#00F7FF', '#FF00AA', '#00FFAA', '#FFAA00', '#7700FF', '#00FF77', '#FF0077', '#00AAFF'],
+    secondary: ['#FF00FF', '#00FFFF', '#FFFF00', '#FF0066', '#00FF66', '#FF6600', '#6600FF', '#00FFCC'],
+    accent: ['#FF00FF', '#00FFAA', '#FFAA00', '#7700FF', '#00FF77', '#FF0077', '#00AAFF', '#FF5500'],
+    bg: 'linear-gradient(135deg, #00F7FF10, #FF00AA10, #00FFAA10, #FFAA0010, #7700FF10)',
+    particle: '#00F7FF50'
+  },
+  RAINBOW_VORTEX: {
+    primary: ['#FF0000', '#FF8000', '#FFFF00', '#00FF00', '#00FFFF', '#0000FF', '#8000FF', '#FF00FF'],
+    secondary: ['#FF3333', '#FF9933', '#FFFF33', '#33FF33', '#33FFFF', '#3333FF', '#9933FF', '#FF33FF'],
+    accent: ['#FF6666', '#FFB366', '#FFFF66', '#66FF66', '#66FFFF', '#6666FF', '#B366FF', '#FF66FF'],
+    bg: 'linear-gradient(135deg, #FF000010, #FF800010, #FFFF0010, #00FF0010, #00FFFF10, #0000FF10, #8000FF10, #FF00FF10)',
+    particle: '#FFFFFF60'
+  },
+  GALACTIC_NEBULA: {
+    primary: ['#FF00FF', '#00FFFF', '#FF8000', '#00FF80', '#FF0080', '#80FF00', '#0080FF', '#FF00AA'],
+    secondary: ['#FF33FF', '#33FFFF', '#FFB366', '#33FFB3', '#FF3366', '#B3FF33', '#33B3FF', '#FF33AA'],
+    accent: ['#FF66FF', '#66FFFF', '#FFCC99', '#66FFCC', '#FF6699', '#CCFF66', '#66CCFF', '#FF66CC'],
+    bg: 'linear-gradient(135deg, #FF00FF10, #00FFFF10, #FF800010, #00FF8010, #FF008010, #80FF0010, #0080FF10, #FF00AA10)',
+    particle: '#FF00FF40'
+  },
+  ATOMIC_FUSION: {
+    primary: ['#00FF00', '#FF0000', '#0000FF', '#FFFF00', '#00FFFF', '#FF00FF', '#FF8000', '#8000FF'],
+    secondary: ['#33FF33', '#FF3333', '#3333FF', '#FFFF33', '#33FFFF', '#FF33FF', '#FFB366', '#B366FF'],
+    accent: ['#66FF66', '#FF6666', '#6666FF', '#FFFF66', '#66FFFF', '#FF66FF', '#FFCC99', '#CC99FF'],
+    bg: 'linear-gradient(135deg, #00FF0010, #FF000010, #0000FF10, #FFFF0010, #00FFFF10, #FF00FF10, #FF800010, #8000FF10)',
+    particle: '#00FF0050'
+  }
+};
 
 const ServerProfileManager = () => {
   // State
@@ -14,92 +71,241 @@ const ServerProfileManager = () => {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('servers');
   const [message, setMessage] = useState({ type: '', text: '' });
+  const [colorPalette, setColorPalette] = useState('NEON_EXPLOSION');
+  const [visualIntensity, setVisualIntensity] = useState(100);
+  const [audioEnabled, setAudioEnabled] = useState(false);
   
   // Modals
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showTokenModal, setShowTokenModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showPaletteModal, setShowPaletteModal] = useState(false);
   
   // Forms
   const [serverForm, setServerForm] = useState({
     name: '',
     description: '',
     privacy: 'public',
-    generateToken: false
+    generateToken: false,
+    serverType: 'quantum',
+    powerLevel: 100
   });
   
   const [tokenForm, setTokenForm] = useState({
     table_name: 'servers',
     record_id: '',
-    permissions: { read: true, write: false, delete: false },
-    expires_in_hours: 24
+    permissions: { read: true, write: true, delete: false, admin: false },
+    expires_in_hours: 72,
+    tokenType: 'quantum'
   });
   
   const [editForm, setEditForm] = useState({
     serverId: '',
     name: '',
     description: '',
-    privacy: 'public'
+    privacy: 'public',
+    serverType: 'quantum'
   });
 
-  // Initialize particles
-  const particlesInit = async (engine) => {
-    await loadSlim(engine);
-  };
+  // Refs
+  const canvasRef = useRef(null);
+  const threeRef = useRef(null);
+  const rafRef = useRef(null);
+  const frameInterval = 1000 / 30;
 
-  // Initial load
+  const currentPalette = PSYCHEDELIC_PALETTES[colorPalette];
+
+  // Initialize Three.js Psychedelic Background
   useEffect(() => {
-    fetchServers();
-    fetchTokens();
+    if (!canvasRef.current) return;
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 5000);
+    const renderer = new THREE.WebGLRenderer({ 
+      canvas: canvasRef.current,
+      alpha: true,
+      antialias: true,
+      powerPreference: "high-performance"
+    });
+    
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    
+    // Create psychedelic particle system
+    const particleCount = 5000;
+    const positions = new Float32Array(particleCount * 3);
+    const colors = new Float32Array(particleCount * 3);
+    const sizes = new Float32Array(particleCount);
+    
+    for (let i = 0; i < particleCount; i++) {
+      const i3 = i * 3;
+      const radius = 2000;
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.random() * Math.PI;
+      
+      positions[i3] = radius * Math.sin(phi) * Math.cos(theta) * (Math.random() * 0.5 + 0.5);
+      positions[i3 + 1] = radius * Math.cos(phi) * (Math.random() * 0.5 + 0.5);
+      positions[i3 + 2] = radius * Math.sin(phi) * Math.sin(theta) * (Math.random() * 0.5 + 0.5);
+      
+      const color = currentPalette.primary[Math.floor(Math.random() * currentPalette.primary.length)];
+      const hex = parseInt(color.replace('#', ''), 16);
+      colors[i3] = ((hex >> 16) & 255) / 255;
+      colors[i3 + 1] = ((hex >> 8) & 255) / 255;
+      colors[i3 + 2] = (hex & 255) / 255;
+      
+      sizes[i] = Math.random() * 5 + 1;
+    }
+    
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+    
+    const material = new THREE.PointsMaterial({
+      size: 3,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.8,
+      sizeAttenuation: true,
+      blending: THREE.AdditiveBlending
+    });
+    
+    const particles = new THREE.Points(geometry, material);
+    scene.add(particles);
+    
+    // Create psychedelic orbs
+    const orbs = currentPalette.primary.map((color, i) => {
+      const geometry = new THREE.SphereGeometry(50 + i * 20, 64, 64);
+      const material = new THREE.MeshBasicMaterial({
+        color: new THREE.Color(color),
+        transparent: true,
+        opacity: 0.2,
+        wireframe: true
+      });
+      
+      const orb = new THREE.Mesh(geometry, material);
+      orb.position.set(
+        (Math.random() - 0.5) * 1500,
+        (Math.random() - 0.5) * 1500,
+        (Math.random() - 0.5) * 1500
+      );
+      scene.add(orb);
+      return orb;
+    });
+    
+    // Create connection lines
+    const lineGeometry = new THREE.BufferGeometry();
+    const lineMaterial = new THREE.LineBasicMaterial({
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.3
+    });
+    
+    const lines = new THREE.LineSegments(lineGeometry, lineMaterial);
+    scene.add(lines);
+    
+    camera.position.z = 1000;
+    
+    // Animation loop
+    let time = 0;
+    const animate = () => {
+      rafRef.current = requestAnimationFrame(animate);
+      
+      const delta = performance.now() - (rafRef.current || 0);
+      if (delta < frameInterval) return;
+      
+      time += 0.01;
+      
+      // Animate particles
+      particles.rotation.x = time * 0.1;
+      particles.rotation.y = time * 0.15;
+      
+      // Animate orbs
+      orbs.forEach((orb, i) => {
+        orb.rotation.x = time * (0.02 + i * 0.005);
+        orb.rotation.y = time * (0.03 + i * 0.005);
+        orb.position.x = Math.sin(time * 0.5 + i) * 300;
+        orb.position.y = Math.cos(time * 0.3 + i) * 300;
+      });
+      
+      // Animate connection lines
+      const linePositions = [];
+      const lineColors = [];
+      
+      for (let i = 0; i < 100; i++) {
+        const x1 = (Math.random() - 0.5) * 2000;
+        const y1 = (Math.random() - 0.5) * 2000;
+        const z1 = (Math.random() - 0.5) * 2000;
+        const x2 = x1 + (Math.random() - 0.5) * 400;
+        const y2 = y1 + (Math.random() - 0.5) * 400;
+        const z2 = z1 + (Math.random() - 0.5) * 400;
+        
+        linePositions.push(x1, y1, z1, x2, y2, z2);
+        
+        const color = currentPalette.accent[Math.floor(Math.random() * currentPalette.accent.length)];
+        const hex = parseInt(color.replace('#', ''), 16);
+        const r = ((hex >> 16) & 255) / 255;
+        const g = ((hex >> 8) & 255) / 255;
+        const b = (hex & 255) / 255;
+        
+        lineColors.push(r, g, b, r, g, b);
+      }
+      
+      lineGeometry.setAttribute('position', new THREE.Float32BufferAttribute(linePositions, 3));
+      lineGeometry.setAttribute('color', new THREE.Float32BufferAttribute(lineColors, 3));
+      
+      renderer.render(scene, camera);
+    };
+    
+    animate();
+    
+    const handleResize = () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    };
+    
+    window.addEventListener('resize', handleResize);
+    
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      renderer.dispose();
+    };
+  }, [colorPalette]);
+
+  // Fetch data
+  useEffect(() => {
+    const loadData = async () => {
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      fetchServers();
+      fetchTokens();
+    };
+    loadData();
   }, []);
 
-  // Message helper
-  const showMessage = (type, text) => {
-    setMessage({ type, text });
-    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
-  };
-
-  // Fetch servers
   const fetchServers = async () => {
     try {
-      const response = await fetch('/api/create-server', {
-        credentials: 'include'
-      });
+      const response = await fetch('/api/create-server', { credentials: 'include' });
       const result = await response.json();
-      
-      if (result.success) {
-        setServers(Array.isArray(result.servers) ? result.servers : []);
-      } else {
-        showMessage('error', result.error || 'Failed to load servers');
-      }
+      if (result.success) setServers(Array.isArray(result.servers) ? result.servers : []);
     } catch (error) {
-      console.error('Error fetching servers:', error);
-      showMessage('error', 'Error fetching servers');
+      showMessage('error', 'Connection Error');
     }
   };
 
-  // Fetch tokens
   const fetchTokens = async () => {
     try {
-      const response = await fetch('/api/create-server?getTokens=true', {
-        credentials: 'include'
-      });
+      const response = await fetch('/api/create-server?getTokens=true', { credentials: 'include' });
       const result = await response.json();
-      
-      if (result.success) {
-        setTokens(Array.isArray(result.tokens) ? result.tokens : []);
-      } else {
-        showMessage('error', result.error || 'Failed to load tokens');
-      }
+      if (result.success) setTokens(Array.isArray(result.tokens) ? result.tokens : []);
     } catch (error) {
-      console.error('Error fetching tokens:', error);
-      showMessage('error', 'Error fetching tokens');
+      showMessage('error', 'Connection Error');
     } finally {
       setLoading(false);
     }
   };
 
-  // Create server
   const createServer = async () => {
     try {
       const response = await fetch('/api/create-server', {
@@ -108,70 +314,19 @@ const ServerProfileManager = () => {
         credentials: 'include',
         body: JSON.stringify(serverForm)
       });
-
       const result = await response.json();
-      
       if (result.success) {
-        showMessage('success', '🚀 Server launched successfully!');
+        showMessage('success', '🚀 QUANTUM SERVER ACTIVATED!');
         setShowCreateModal(false);
-        setServerForm({ name: '', description: '', privacy: 'public', generateToken: false });
+        setServerForm({ name: '', description: '', privacy: 'public', generateToken: false, serverType: 'quantum', powerLevel: 100 });
         fetchServers();
-        
-        if (result.token) {
-          showMessage('success', '🔑 Token created successfully!');
-          fetchTokens();
-        }
-      } else {
-        showMessage('error', result.error || 'Failed to create server');
+        if (result.token) showMessage('success', '🔑 NEURAL TOKEN GENERATED!');
       }
     } catch (error) {
-      console.error('Error creating server:', error);
-      showMessage('error', 'Error creating server');
+      showMessage('error', 'Quantum Flux Error');
     }
   };
 
-  // Generate token
-  const generateToken = async () => {
-    try {
-      const response = await fetch('/api/create-server', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          name: `Token Server - ${tokenForm.table_name}`,
-          description: 'Server created for token-based API access',
-          privacy: 'private',
-          generateToken: true,
-          table_name: tokenForm.table_name,
-          record_id: tokenForm.record_id,
-          permissions: tokenForm.permissions,
-          expires_in_hours: tokenForm.expires_in_hours
-        })
-      });
-
-      const result = await response.json();
-      
-      if (result.success) {
-        showMessage('success', '🔐 Token generated successfully!');
-        setShowTokenModal(false);
-        setTokenForm({
-          table_name: 'servers',
-          record_id: '',
-          permissions: { read: true, write: false, delete: false },
-          expires_in_hours: 24
-        });
-        fetchServers();
-        fetchTokens();
-      } else {
-        showMessage('error', result.error || 'Failed to generate token');
-      }
-    } catch (error) {
-      console.error('Error generating token:', error);
-      showMessage('error', 'Error generating token');
-    }
-  };
-
-  // Update server
   const updateServer = async () => {
     try {
       const response = await fetch('/api/create-server', {
@@ -180,29 +335,20 @@ const ServerProfileManager = () => {
         credentials: 'include',
         body: JSON.stringify(editForm)
       });
-
       const result = await response.json();
-      
       if (result.success) {
-        showMessage('success', '⚡ Server updated successfully!');
+        showMessage('success', '⚡ SERVER RESYNCHRONIZED!');
         setShowEditModal(false);
-        setEditForm({ serverId: '', name: '', description: '', privacy: 'public' });
         fetchServers();
-      } else {
-        showMessage('error', result.error || 'Failed to update server');
       }
     } catch (error) {
-      console.error('Error updating server:', error);
-      showMessage('error', 'Error updating server');
+      showMessage('error', 'Sync Failure');
     }
   };
 
-  // Delete server
   const deleteServer = async (serverId) => {
-    if (!window.confirm('⚠️ Are you sure you want to delete this server? This action cannot be undone.')) {
-      return;
-    }
-    
+    const confirmed = await immersiveConfirm('QUANTUM DECOMPILATION', 'Initiate server de-rez protocol?');
+    if (!confirmed) return;
     try {
       const response = await fetch('/api/create-server', {
         method: 'DELETE',
@@ -210,866 +356,586 @@ const ServerProfileManager = () => {
         credentials: 'include',
         body: JSON.stringify({ serverId })
       });
-
       const result = await response.json();
-      
       if (result.success) {
-        showMessage('success', '🗑️ Server deleted successfully!');
+        showMessage('success', '💥 SERVER DISINTEGRATED');
         fetchServers();
-      } else {
-        showMessage('error', result.error || 'Failed to delete server');
       }
     } catch (error) {
-      console.error('Error deleting server:', error);
-      showMessage('error', 'Error deleting server');
+      showMessage('error', 'Decomp Failed');
     }
   };
 
-  // Revoke token
-  const revokeToken = async (tokenId) => {
-    if (!window.confirm('⚠️ Are you sure you want to revoke this token?')) {
-      return;
-    }
-    
-    try {
-      const response = await fetch('/api/create-server', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ tokenId })
-      });
-
-      const result = await response.json();
-      
-      if (result.success) {
-        showMessage('success', '🔓 Token revoked successfully!');
-        fetchTokens();
-      } else {
-        showMessage('error', result.error || 'Failed to revoke token');
-      }
-    } catch (error) {
-      console.error('Error revoking token:', error);
-      showMessage('error', 'Error revoking token');
-    }
+  const showMessage = (type, text) => {
+    setMessage({ type, text });
+    setTimeout(() => setMessage({ type: '', text: '' }), 3000);
   };
 
-  // Copy to clipboard
-  const copyToClipboard = async (text) => {
-    if (text && navigator.clipboard) {
-      try {
-        await navigator.clipboard.writeText(text);
-        showMessage('success', '📋 Copied to clipboard!');
-      } catch (error) {
-        showMessage('error', 'Failed to copy');
-      }
-    }
-  };
-
-  // Format date
-  const formatDate = (dateString) => {
-    if (!dateString) return 'N/A';
-    try {
-      return new Date(dateString).toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      });
-    } catch (error) {
-      return 'Invalid Date';
-    }
-  };
-
-  // Open edit modal
-  const openEditModal = (server) => {
-    if (!server) return;
-    setEditForm({
-      serverId: server.id || '',
-      name: server.name || '',
-      description: server.description || '',
-      privacy: server.is_public ? 'public' : 'private'
+  const immersiveConfirm = async (title, message) => {
+    return new Promise((resolve) => {
+      const modal = document.createElement('div');
+      modal.className = 'fixed inset-0 z-[9999] flex items-center justify-center';
+      modal.innerHTML = `
+        <div class="absolute inset-0" style="background: ${currentPalette.bg}"></div>
+        <div class="relative z-10 p-12 rounded-4xl max-w-md w-full mx-4" style="
+          background: ${currentPalette.bg};
+          border: 4px solid ${currentPalette.primary[0]};
+          box-shadow: 0 0 100px ${currentPalette.primary[0]};
+        ">
+          <div class="text-center mb-8">
+            <div class="w-32 h-32 mx-auto mb-6 rounded-full flex items-center justify-center animate-pulse" style="
+              border: 4px solid ${currentPalette.primary[1]};
+              box-shadow: 0 0 60px ${currentPalette.primary[1]};
+              background: ${currentPalette.bg};
+            ">
+              <FaBomb class="text-6xl" style="color: ${currentPalette.primary[2]}" />
+            </div>
+            <h3 class="text-4xl font-black mb-4" style="color: ${currentPalette.primary[0]}">${title}</h3>
+            <p class="text-2xl" style="color: ${currentPalette.secondary[0]}">${message}</p>
+          </div>
+          <div class="grid grid-cols-2 gap-6">
+            <button id="confirm-cancel" class="px-8 py-4 rounded-2xl text-2xl font-black transition-all duration-300 hover:scale-105" style="
+              background: ${currentPalette.bg};
+              border: 3px solid ${currentPalette.primary[3]};
+              color: ${currentPalette.primary[3]};
+              box-shadow: 0 0 30px ${currentPalette.primary[3]};
+            ">
+              ABORT
+            </button>
+            <button id="confirm-ok" class="px-8 py-4 rounded-2xl text-2xl font-black transition-all duration-300 hover:scale-105" style="
+              background: linear-gradient(135deg, ${currentPalette.primary[0]}, ${currentPalette.primary[1]});
+              color: white;
+              box-shadow: 0 0 50px ${currentPalette.primary[0]};
+            ">
+              CONFIRM
+            </button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+      document.getElementById('confirm-cancel').onclick = () => { modal.remove(); resolve(false); };
+      document.getElementById('confirm-ok').onclick = () => { modal.remove(); resolve(true); };
     });
-    setShowEditModal(true);
   };
 
-  // Loading state with immersive effects
   if (loading) {
     return (
-      <motion.div 
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-950 to-black flex flex-col items-center justify-center relative overflow-hidden"
-      >
-        {/* Animated Background */}
-        <div className="absolute inset-0 bg-gradient-to-br from-blue-900/20 via-purple-900/20 to-black" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-blue-500/10 via-transparent to-purple-500/10" />
+      <div className="min-h-screen relative overflow-hidden" style={{ background: currentPalette.bg }}>
+        <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
         
-        {/* Grid Pattern */}
-        <div className="absolute inset-0 opacity-5">
-          <div className="absolute inset-0 bg-[linear-gradient(90deg,_#3b82f6_1px,_transparent_1px)] bg-[size:40px_40px]" />
-          <div className="absolute inset-0 bg-[linear-gradient(0deg,_#3b82f6_1px,_transparent_1px)] bg-[size:40px_40px]" />
-        </div>
-        
-        {/* Floating Elements */}
-        <motion.div
-          animate={{ 
-            y: [0, -30, 0],
-            rotate: [0, 360, 0]
-          }}
-          transition={{ 
-            duration: 8,
-            repeat: Infinity,
-            ease: "easeInOut"
-          }}
-          className="absolute top-20 left-20 w-32 h-32 bg-blue-500/5 rounded-full blur-3xl"
-        />
-        <motion.div
-          animate={{ 
-            y: [0, 30, 0],
-            rotate: [0, -360, 0]
-          }}
-          transition={{ 
-            duration: 10,
-            repeat: Infinity,
-            ease: "easeInOut",
-            delay: 1
-          }}
-          className="absolute bottom-20 right-20 w-40 h-40 bg-purple-500/5 rounded-full blur-3xl"
-        />
-        
-        <motion.div
-          initial={{ scale: 0.5, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ duration: 0.5 }}
-          className="relative z-10"
-        >
+        <div className="relative z-10 flex flex-col items-center justify-center min-h-screen">
           <motion.div
-            animate={{ rotate: 360 }}
-            transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
-            className="w-32 h-32 rounded-full border-4 border-transparent bg-gradient-to-r from-blue-500 via-purple-500 to-cyan-500 p-2 shadow-2xl shadow-blue-500/30"
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ type: "spring", damping: 15 }}
+            className="relative mb-16"
           >
-            <div className="w-full h-full rounded-full bg-gray-950 flex items-center justify-center border border-gray-800">
-              <FaServer className="text-4xl text-white" />
+            {currentPalette.primary.map((color, i) => (
+              <motion.div
+                key={i}
+                animate={{ 
+                  rotate: 360,
+                  scale: [1, 1.2, 1]
+                }}
+                transition={{ 
+                  duration: 8 + i * 2,
+                  repeat: Infinity,
+                  ease: "linear"
+                }}
+                className="absolute -inset-12 rounded-full"
+                style={{
+                  border: `4px solid ${color}${Math.floor(20 + i * 10)}`,
+                  filter: `blur(${4 + i}px)`
+                }}
+              />
+            ))}
+            
+            <div className="relative w-80 h-80 rounded-full flex items-center justify-center" style={{
+              background: `radial-gradient(circle, ${currentPalette.primary[0]}30, transparent 70%)`,
+              border: `6px solid ${currentPalette.primary[1]}`,
+              boxShadow: `0 0 100px ${currentPalette.primary[1]}, inset 0 0 100px ${currentPalette.primary[2]}`
+            }}>
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+                className="absolute inset-8 rounded-full border-4"
+                style={{ borderColor: currentPalette.primary[3] }}
+              />
+              <FaServer className="text-9xl" style={{ color: currentPalette.primary[4] }} />
             </div>
           </motion.div>
-        </motion.div>
-        
-        <motion.div
-          initial={{ y: 20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.3 }}
-          className="mt-8 text-center z-10"
-        >
-          <h2 className="text-4xl font-bold bg-gradient-to-r from-blue-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent mb-4">
-            Loading HyperDock
-          </h2>
-          <p className="text-gray-400 text-lg">Initializing immersive dashboard...</p>
-          <div className="mt-6 flex justify-center space-x-2">
-            <motion.div 
-              animate={{ scale: [1, 1.2, 1] }}
-              transition={{ duration: 0.5, repeat: Infinity, delay: 0 }}
-              className="w-3 h-3 bg-blue-500 rounded-full"
-            />
-            <motion.div 
-              animate={{ scale: [1, 1.2, 1] }}
-              transition={{ duration: 0.5, repeat: Infinity, delay: 0.2 }}
-              className="w-3 h-3 bg-purple-500 rounded-full"
-            />
-            <motion.div 
-              animate={{ scale: [1, 1.2, 1] }}
-              transition={{ duration: 0.5, repeat: Infinity, delay: 0.4 }}
-              className="w-3 h-3 bg-cyan-500 rounded-full"
-            />
-          </div>
-        </motion.div>
-      </motion.div>
+
+          <motion.div
+            initial={{ y: 40, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.5 }}
+            className="text-center"
+          >
+            <h1 className="text-8xl font-black mb-10 tracking-tighter">
+              {currentPalette.primary.map((color, i) => (
+                <motion.span
+                  key={i}
+                  animate={{ y: [0, -10, 0] }}
+                  transition={{ duration: 2, delay: i * 0.2, repeat: Infinity }}
+                  className="inline-block"
+                  style={{ color, textShadow: `0 0 30px ${color}` }}
+                >
+                  HYPERDOCK
+                </motion.span>
+              ))}
+            </h1>
+            
+            <div className="relative w-[800px] h-4 rounded-full overflow-hidden mx-auto mb-14" style={{
+              background: `linear-gradient(90deg, ${currentPalette.primary.join(', ')})`,
+              opacity: 0.6
+            }}>
+              <motion.div
+                initial={{ x: "-100%" }}
+                animate={{ x: "100%" }}
+                transition={{ duration: 2, repeat: Infinity }}
+                className="absolute inset-y-0 w-1/3"
+                style={{
+                  background: `linear-gradient(90deg, transparent, white, transparent)`,
+                  filter: 'blur(10px)'
+                }}
+              />
+            </div>
+            
+            <div className="space-y-6">
+              {['INITIALIZING QUANTUM CORE', 'CALIBRATING NEURAL MATRIX', 'SYNCING CYBERSPACE', 'BOOTING HYPERDRIVE'].map((text, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ x: -200, opacity: 0 }}
+                  animate={{ x: 0, opacity: 1 }}
+                  transition={{ delay: 1 + i * 0.3 }}
+                  className="text-3xl font-bold flex items-center justify-center space-x-4"
+                  style={{ color: currentPalette.secondary[i % currentPalette.secondary.length] }}
+                >
+                  <div className="w-4 h-4 rounded-full animate-pulse" style={{
+                    background: currentPalette.accent[i % currentPalette.accent.length],
+                    boxShadow: `0 0 20px ${currentPalette.accent[i % currentPalette.accent.length]}`
+                  }} />
+                  <span style={{ textShadow: `0 0 20px ${currentPalette.secondary[i % currentPalette.secondary.length]}` }}>
+                    {text}
+                  </span>
+                  <div className="w-4 h-4 rounded-full animate-pulse" style={{
+                    background: currentPalette.accent[i % currentPalette.accent.length],
+                    boxShadow: `0 0 20px ${currentPalette.accent[i % currentPalette.accent.length]}`
+                  }} />
+                </motion.div>
+              ))}
+            </div>
+          </motion.div>
+        </div>
+      </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-950 to-black text-white relative overflow-hidden">
-      {/* Immersive Background Effects */}
-      <div className="fixed inset-0 -z-20">
-        {/* Animated Gradient Layers */}
-        <div className="absolute inset-0 bg-gradient-to-br from-blue-900/20 via-purple-900/20 to-black" />
-        <div className="absolute inset-0 bg-gradient-to-t from-gray-950 via-transparent to-gray-900" />
-        
-        {/* Grid Pattern with Animation */}
-        <div className="absolute inset-0 opacity-[0.03]">
-          <div className="absolute inset-0 bg-[linear-gradient(90deg,_#3b82f6_1px,_transparent_1px)] bg-[size:60px_60px]" />
-          <div className="absolute inset-0 bg-[linear-gradient(0deg,_#3b82f6_1px,_transparent_1px)] bg-[size:60px_60px]" />
-        </div>
-        
-        {/* Floating Glow Orbs */}
-        <motion.div
-          animate={{ 
-            x: [0, 100, 0],
-            y: [0, -50, 0],
-          }}
-          transition={{ 
-            duration: 20,
-            repeat: Infinity,
-            ease: "easeInOut"
-          }}
-          className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl"
-        />
-        <motion.div
-          animate={{ 
-            x: [0, -100, 0],
-            y: [0, 50, 0],
-          }}
-          transition={{ 
-            duration: 25,
-            repeat: Infinity,
-            ease: "easeInOut",
-            delay: 5
-          }}
-          className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl"
-        />
-        
-        {/* Corner Accents */}
-        <div className="absolute top-0 left-0 w-64 h-64 bg-gradient-to-br from-blue-500/5 to-transparent" />
-        <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-bl from-purple-500/5 to-transparent" />
-        <div className="absolute bottom-0 left-0 w-64 h-64 bg-gradient-to-tr from-cyan-500/5 to-transparent" />
-        <div className="absolute bottom-0 right-0 w-64 h-64 bg-gradient-to-tl from-pink-500/5 to-transparent" />
-      </div>
-
-      {/* Particles Background - Client Side Only */}
-      {typeof window !== 'undefined' && (
-        <Particles
-          id="tsparticles"
-          init={particlesInit}
-          className="fixed inset-0 -z-10"
-          options={{
-            background: { color: { value: "transparent" } },
-            fpsLimit: 120,
-            interactivity: {
-              events: {
-                onHover: {
-                  enable: true,
-                  mode: "repulse",
-                },
-                onClick: {
-                  enable: true,
-                  mode: "push",
-                },
-              },
-              modes: {
-                repulse: {
-                  distance: 100,
-                  duration: 0.4,
-                },
-                push: {
-                  quantity: 4,
-                },
-              },
-            },
-            particles: {
-              color: {
-                value: ["#3b82f6", "#8b5cf6", "#06b6d4", "#ec4899"],
-              },
-              links: {
-                color: "#4f46e5",
-                distance: 150,
-                enable: true,
-                opacity: 0.15,
-                width: 1,
-              },
-              move: {
-                direction: "none",
-                enable: true,
-                outModes: {
-                  default: "bounce",
-                },
-                random: false,
-                speed: 1,
-                straight: false,
-              },
-              number: {
-                density: {
-                  enable: true,
-                  area: 800,
-                },
-                value: 60,
-              },
-              opacity: {
-                value: 0.3,
-                animation: {
-                  enable: true,
-                  speed: 1,
-                  minimumValue: 0.1,
-                },
-              },
-              shape: {
-                type: "circle",
-              },
-              size: {
-                value: { min: 1, max: 5 },
-                animation: {
-                  enable: true,
-                  speed: 3,
-                  minimumValue: 0.5,
-                },
-              },
-            },
-            detectRetina: true,
-          }}
-        />
-      )}
-
-      {/* Glowing Message Banner */}
-      <AnimatePresence>
-        {message.text && (
+    <div className="min-h-screen relative overflow-hidden" style={{ background: currentPalette.bg }}>
+      {/* Three.js Psychedelic Background */}
+      <canvas ref={canvasRef} className="fixed inset-0 w-full h-full" />
+      
+      {/* Pulsing Border */}
+      <div className="fixed inset-0 pointer-events-none">
+        {currentPalette.primary.map((color, i) => (
           <motion.div
-            initial={{ y: -100, opacity: 0, scale: 0.8 }}
-            animate={{ y: 0, opacity: 1, scale: 1 }}
-            exit={{ y: -100, opacity: 0, scale: 0.8 }}
-            className={`fixed top-6 right-6 z-50 px-6 py-4 rounded-2xl backdrop-blur-xl border ${
-              message.type === 'success' 
-                ? 'bg-gradient-to-r from-emerald-900/40 to-green-900/40 border-emerald-500/50 shadow-2xl shadow-emerald-500/20' 
-                : 'bg-gradient-to-r from-rose-900/40 to-red-900/40 border-rose-500/50 shadow-2xl shadow-rose-500/20'
-            }`}
+            key={i}
+            animate={{ 
+              scale: [1, 1.02, 1],
+              opacity: [0.1, 0.3, 0.1]
+            }}
+            transition={{ 
+              duration: 3 + i,
+              repeat: Infinity,
+              ease: "easeInOut"
+            }}
+            className="absolute inset-0 border-[20px] rounded-[100px]"
+            style={{ 
+              borderColor: color,
+              filter: 'blur(20px)'
+            }}
+          />
+        ))}
+      </div>
+      
+      {/* Floating Particles Effect */}
+      <div className="fixed inset-0 pointer-events-none">
+        {Array.from({ length: 50 }).map((_, i) => (
+          <motion.div
+            key={i}
+            animate={{
+              x: [Math.random() * window.innerWidth, Math.random() * window.innerWidth],
+              y: [Math.random() * window.innerHeight, Math.random() * window.innerHeight],
+              rotate: 360
+            }}
+            transition={{
+              duration: 10 + Math.random() * 20,
+              repeat: Infinity,
+              ease: "linear"
+            }}
+            className="absolute w-4 h-4 rounded-full"
+            style={{
+              background: currentPalette.primary[i % currentPalette.primary.length],
+              boxShadow: `0 0 30px ${currentPalette.primary[i % currentPalette.primary.length]}`,
+              filter: 'blur(2px)'
+            }}
+          />
+        ))}
+      </div>
+      
+      {/* Palette Selector */}
+      <div className="fixed top-6 right-6 z-50">
+        <ParallaxTilt
+          tiltMaxAngleX={15}
+          tiltMaxAngleY={15}
+          scale={1.1}
+          glareEnable={true}
+          glareMaxOpacity={0.8}
+          className="relative"
+        >
+          <motion.button
+            whileHover={{ scale: 1.1, rotate: 360 }}
+            whileTap={{ scale: 0.9 }}
+            onClick={() => setShowPaletteModal(!showPaletteModal)}
+            className="p-4 rounded-3xl shadow-2xl flex items-center justify-center"
+            style={{
+              background: `linear-gradient(135deg, ${currentPalette.primary[0]}, ${currentPalette.primary[1]})`,
+              border: `3px solid ${currentPalette.primary[2]}`,
+              boxShadow: `0 0 50px ${currentPalette.primary[0]}`
+            }}
           >
-            <div className="flex items-center space-x-3">
-              <motion.div
-                animate={{ rotate: 360 }}
-                transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-                className={`p-2 rounded-full ${message.type === 'success' ? 'bg-emerald-500/20' : 'bg-rose-500/20'}`}
-              >
-                {message.type === 'success' ? 
-                  <FaCheck className="text-emerald-400" /> : 
-                  <FaTrash className="text-rose-400" />
-                }
-              </motion.div>
-              <span className="font-medium">{message.text}</span>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Main Header with Glassmorphism */}
+            <FaPaletteIcon className="text-3xl" style={{ color: 'white' }} />
+          </motion.button>
+        </ParallaxTilt>
+      </div>
+      
+      {/* Main Header */}
       <motion.header
         initial={{ y: -100, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        transition={{ duration: 0.6, type: "spring" }}
-        className="sticky top-0 z-40 backdrop-blur-2xl bg-gray-900/30 border-b border-gray-800/50 shadow-2xl shadow-black/30"
+        transition={{ type: "spring", stiffness: 100, damping: 20 }}
+        className="relative z-10"
       >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex justify-between items-center">
-            <div className="flex items-center space-x-4">
+        <div className="max-w-8xl mx-auto px-10 py-16">
+          <div className="flex items-center justify-between mb-20">
+            <div className="flex items-center space-x-10">
               <motion.div
                 whileHover={{ scale: 1.1, rotate: 360 }}
-                transition={{ duration: 0.5 }}
+                transition={{ duration: 0.8 }}
                 className="relative"
               >
-                <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-purple-500 rounded-2xl blur-xl opacity-50" />
-                <div className="relative bg-gray-900/80 p-3 rounded-2xl border border-gray-700/50">
-                  <FaServer className="text-3xl text-blue-400" />
+                {currentPalette.primary.map((color, i) => (
+                  <motion.div
+                    key={i}
+                    animate={{ 
+                      rotate: 360,
+                      scale: [1, 1.1, 1]
+                    }}
+                    transition={{ 
+                      duration: 15 + i * 3,
+                      repeat: Infinity,
+                      ease: "linear"
+                    }}
+                    className="absolute -inset-10 rounded-full"
+                    style={{
+                      border: `6px solid ${color}${Math.floor(30 + i * 10)}`,
+                      filter: 'blur(8px)'
+                    }}
+                  />
+                ))}
+                
+                <div className="relative p-12 rounded-5xl shadow-2xl" style={{
+                  background: `linear-gradient(135deg, ${currentPalette.primary[0]}30, ${currentPalette.primary[1]}20, ${currentPalette.primary[2]}10)`,
+                  border: `6px solid ${currentPalette.primary[3]}`,
+                  boxShadow: `0 0 100px ${currentPalette.primary[3]}, inset 0 0 100px ${currentPalette.primary[4]}`
+                }}>
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+                    className="absolute inset-4 rounded-full border-4"
+                    style={{ borderColor: currentPalette.primary[5] }}
+                  />
+                  <FaServer className="text-8xl" style={{ color: currentPalette.primary[6] }} />
                 </div>
               </motion.div>
               
               <div>
-                <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent">
-                  HyperDock
-                </h1>
-                <p className="text-gray-400 text-sm flex items-center">
-                  <FaNetworkWired className="mr-2" />
-                  Advanced Server & Token Management System
-                </p>
+                <motion.h1 
+                  initial={{ opacity: 0, y: 30 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="text-9xl font-black mb-8 tracking-tighter"
+                >
+                  <span className="bg-gradient-to-r from-transparent via-transparent to-transparent bg-clip-text">
+                    {currentPalette.primary.map((color, i) => (
+                      <motion.span
+                        key={i}
+                        animate={{ 
+                          y: [0, -15, 0],
+                          textShadow: [
+                            `0 0 10px ${color}`,
+                            `0 0 40px ${color}`,
+                            `0 0 10px ${color}`
+                          ]
+                        }}
+                        transition={{ 
+                          duration: 2,
+                          delay: i * 0.1,
+                          repeat: Infinity 
+                        }}
+                        className="inline-block mr-2"
+                        style={{ color }}
+                      >
+                        HYPERDOCK
+                      </motion.span>
+                    ))}
+                  </span>
+                </motion.h1>
+                <motion.p 
+                  initial={{ opacity: 0, y: 30 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.2 }}
+                  className="text-4xl flex items-center space-x-6"
+                  style={{ color: currentPalette.secondary[0] }}
+                >
+                  <FaSatellite className="text-5xl animate-spin" style={{ animationDuration: '5s' }} />
+                  <span className="font-black tracking-widest">QUANTUM SERVER MANAGEMENT INTERFACE</span>
+                  <FaSparkles className="text-5xl animate-bounce" style={{ color: currentPalette.accent[0] }} />
+                </motion.p>
               </div>
             </div>
             
-            <div className="flex space-x-4">
+            <div className="flex space-x-8">
               <ParallaxTilt
-                tiltMaxAngleX={10}
-                tiltMaxAngleY={10}
-                scale={1.1}
+                tiltMaxAngleX={20}
+                tiltMaxAngleY={20}
+                scale={1.15}
                 glareEnable={true}
-                glareMaxOpacity={0.3}
-                glareColor="#ffffff"
-                glarePosition="all"
+                glareMaxOpacity={0.9}
+                glareColor={currentPalette.primary[0]}
                 className="relative"
               >
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={() => setShowCreateModal(true)}
-                  className="px-8 py-3 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 rounded-2xl font-bold shadow-2xl shadow-blue-500/25 flex items-center space-x-3 group relative overflow-hidden"
+                  className="relative group"
                 >
-                  <div className="absolute inset-0 bg-gradient-to-r from-blue-400/0 via-blue-400/20 to-blue-400/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
-                  <FaRocket className="text-xl" />
-                  <span>Launch Server</span>
+                  <motion.div
+                    animate={{ 
+                      scale: [1, 1.05, 1],
+                      boxShadow: [
+                        `0 0 60px ${currentPalette.primary[0]}`,
+                        `0 0 100px ${currentPalette.primary[1]}`,
+                        `0 0 60px ${currentPalette.primary[0]}`
+                      ]
+                    }}
+                    transition={{ duration: 2, repeat: Infinity }}
+                    className="absolute inset-0 rounded-5xl blur-2xl opacity-80"
+                    style={{ background: `linear-gradient(135deg, ${currentPalette.primary[0]}, ${currentPalette.primary[1]})` }}
+                  />
+                  <div className="relative px-20 py-8 rounded-5xl font-black text-3xl flex items-center space-x-8 overflow-hidden" style={{
+                    background: `linear-gradient(135deg, ${currentPalette.primary[0]}, ${currentPalette.primary[1]}, ${currentPalette.primary[2]})`,
+                    border: `4px solid ${currentPalette.primary[3]}`,
+                    boxShadow: `0 0 80px ${currentPalette.primary[0]}`
+                  }}>
+                    <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/30 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
+                    <FaRocket className="text-5xl animate-bounce" />
+                    <span className="tracking-widest">ACTIVATE SERVER</span>
+                    <FaBolt className="text-5xl animate-pulse" />
+                  </div>
                 </motion.button>
               </ParallaxTilt>
               
               <ParallaxTilt
-                tiltMaxAngleX={10}
-                tiltMaxAngleY={10}
-                scale={1.1}
+                tiltMaxAngleX={20}
+                tiltMaxAngleY={20}
+                scale={1.15}
                 glareEnable={true}
-                glareMaxOpacity={0.3}
-                glareColor="#ffffff"
-                glarePosition="all"
+                glareMaxOpacity={0.9}
+                glareColor={currentPalette.secondary[0]}
                 className="relative"
               >
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={() => setShowTokenModal(true)}
-                  className="px-8 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 rounded-2xl font-bold shadow-2xl shadow-purple-500/25 flex items-center space-x-3 group relative overflow-hidden"
+                  className="relative group"
                 >
-                  <div className="absolute inset-0 bg-gradient-to-r from-purple-400/0 via-purple-400/20 to-purple-400/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
-                  <SiJsonwebtokens className="text-xl" />
-                  <span>Generate Token</span>
+                  <motion.div
+                    animate={{ 
+                      scale: [1, 1.05, 1],
+                      boxShadow: [
+                        `0 0 60px ${currentPalette.secondary[0]}`,
+                        `0 0 100px ${currentPalette.secondary[1]}`,
+                        `0 0 60px ${currentPalette.secondary[0]}`
+                      ]
+                    }}
+                    transition={{ duration: 2, repeat: Infinity }}
+                    className="absolute inset-0 rounded-5xl blur-2xl opacity-80"
+                    style={{ background: `linear-gradient(135deg, ${currentPalette.secondary[0]}, ${currentPalette.secondary[1]})` }}
+                  />
+                  <div className="relative px-20 py-8 rounded-5xl font-black text-3xl flex items-center space-x-8 overflow-hidden" style={{
+                    background: `linear-gradient(135deg, ${currentPalette.secondary[0]}, ${currentPalette.secondary[1]}, ${currentPalette.secondary[2]})`,
+                    border: `4px solid ${currentPalette.secondary[3]}`,
+                    boxShadow: `0 0 80px ${currentPalette.secondary[0]}`
+                  }}>
+                    <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/30 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
+                    <SiJsonwebtokens className="text-5xl animate-spin" style={{ animationDuration: '3s' }} />
+                    <span className="tracking-widest">GENERATE TOKEN</span>
+                    <FaKey className="text-5xl animate-pulse" />
+                  </div>
                 </motion.button>
               </ParallaxTilt>
             </div>
           </div>
           
-          {/* Animated Tabs with Glow */}
-          <motion.div 
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="flex space-x-12 mt-8 relative"
-          >
-            <div className="absolute bottom-0 h-[2px] bg-gradient-to-r from-blue-500/30 via-purple-500/30 to-cyan-500/30 w-full" />
+          {/* Tabs */}
+          <div className="relative">
+            <div className="absolute inset-0 rounded-5xl backdrop-blur-2xl" style={{
+              background: `linear-gradient(135deg, ${currentPalette.primary.map(c => c + '20').join(', ')})`,
+              border: `3px solid ${currentPalette.primary[0]}`,
+              boxShadow: `0 0 60px ${currentPalette.primary[0]}`
+            }} />
             
-            {['servers', 'tokens'].map((tab) => (
-              <motion.button
-                key={tab}
-                whileHover={{ scale: 1.05, y: -2 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => setActiveTab(tab)}
-                className={`relative pb-4 px-2 font-semibold transition-all duration-300 group ${
-                  activeTab === tab 
-                    ? 'text-white' 
-                    : 'text-gray-400 hover:text-gray-300'
-                }`}
-              >
-                <div className="flex items-center space-x-3">
-                  {tab === 'servers' ? (
-                    <div className={`p-2 rounded-xl ${activeTab === tab ? 'bg-blue-500/20' : 'bg-gray-800/50'}`}>
-                      <FaServer className={`text-lg ${activeTab === tab ? 'text-blue-400' : 'text-gray-500'}`} />
-                    </div>
-                  ) : (
-                    <div className={`p-2 rounded-xl ${activeTab === tab ? 'bg-purple-500/20' : 'bg-gray-800/50'}`}>
-                      <FaKey className={`text-lg ${activeTab === tab ? 'text-purple-400' : 'text-gray-500'}`} />
-                    </div>
-                  )}
-                  <span className="relative text-lg">
-                    {tab.charAt(0).toUpperCase() + tab.slice(1)}
-                    {activeTab === tab && (
+            <div className="relative z-10 p-3">
+              <div className="flex space-x-4">
+                {[
+                  { id: 'servers', label: 'QUANTUM SERVERS', icon: FaServer, count: servers.length, color: currentPalette.primary[0] },
+                  { id: 'tokens', label: 'NEURAL TOKENS', icon: SiJsonwebtokens, count: tokens.length, color: currentPalette.primary[1] },
+                  { id: 'network', label: 'CYBER NETWORK', icon: FaNetworkWired, color: currentPalette.primary[2] },
+                  { id: 'analytics', label: 'QUANTUM ANALYTICS', icon: FaChartLine, color: currentPalette.primary[3] },
+                  { id: 'settings', label: 'DIMENSION SETTINGS', icon: FaCog, color: currentPalette.primary[4] }
+                ].map((tab) => (
+                  <motion.button
+                    key={tab.id}
+                    whileHover={{ scale: 1.05, y: -4 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`relative flex-1 py-10 px-8 rounded-4xl transition-all duration-300 flex items-center justify-center space-x-6 group ${
+                      activeTab === tab.id ? 'scale-105' : ''
+                    }`}
+                    style={{
+                      background: activeTab === tab.id 
+                        ? `linear-gradient(135deg, ${tab.color}40, ${currentPalette.secondary[0]}20, transparent)`
+                        : `linear-gradient(135deg, ${tab.color}20, transparent)`,
+                      border: `3px solid ${activeTab === tab.id ? tab.color : tab.color + '60'}`,
+                      boxShadow: activeTab === tab.id 
+                        ? `0 0 40px ${tab.color}, inset 0 0 40px ${currentPalette.accent[0]}20`
+                        : `0 0 20px ${tab.color}60`
+                    }}
+                  >
+                    {React.createElement(tab.icon, {
+                      className: `text-4xl ${activeTab === tab.id ? 'animate-pulse' : ''}`,
+                      style: { color: tab.color }
+                    })}
+                    <span className={`text-2xl font-black tracking-wider ${activeTab === tab.id ? '' : 'opacity-80'}`} style={{ color: tab.color }}>
+                      {tab.label}
+                    </span>
+                    {tab.count !== undefined && (
+                      <span className="px-6 py-3 rounded-full text-xl font-black" style={{
+                        background: `linear-gradient(135deg, ${tab.color}, ${currentPalette.accent[0]})`,
+                        boxShadow: `0 0 30px ${tab.color}`,
+                        color: 'white'
+                      }}>
+                        {tab.count}
+                      </span>
+                    )}
+                    
+                    {activeTab === tab.id && (
                       <motion.div
                         layoutId="activeTab"
-                        className="absolute -bottom-4 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full"
+                        className="absolute bottom-2 left-1/2 transform -translate-x-1/2 w-4/5 h-2 rounded-full"
+                        style={{ 
+                          background: `linear-gradient(90deg, ${tab.color}, ${currentPalette.accent[0]})`,
+                          boxShadow: `0 0 20px ${tab.color}`
+                        }}
                       />
                     )}
-                  </span>
-                  {tab === 'servers' && servers.length > 0 && (
-                    <span className="px-3 py-1 bg-gradient-to-r from-blue-900/30 to-cyan-900/30 rounded-full text-sm border border-blue-700/30">
-                      {servers.length}
-                    </span>
-                  )}
-                  {tab === 'tokens' && tokens.length > 0 && (
-                    <span className="px-3 py-1 bg-gradient-to-r from-purple-900/30 to-pink-900/30 rounded-full text-sm border border-purple-700/30">
-                      {tokens.length}
-                    </span>
-                  )}
-                </div>
-                
-                {/* Hover Glow Effect */}
-                {activeTab !== tab && (
-                  <div className="absolute -bottom-4 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-gray-600/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                )}
-              </motion.button>
-            ))}
-          </motion.div>
+                  </motion.button>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       </motion.header>
-
-      {/* Main Content Area */}
+      
+      {/* Main Content */}
       <motion.main 
-        initial={{ opacity: 0, y: 20 }}
+        initial={{ opacity: 0, y: 60 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.3 }}
-        className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative"
+        className="max-w-8xl mx-auto px-10 py-16 relative z-10"
       >
-        {/* Servers Tab */}
         <AnimatePresence mode="wait">
           {activeTab === 'servers' && (
             <motion.div
               key="servers"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -30 }}
               className="relative"
             >
               {servers.length === 0 ? (
-                <motion.div 
-                  initial={{ scale: 0.9, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  className="text-center py-24"
-                >
-                  <div className="relative inline-block">
-                    <div className="w-48 h-48 mx-auto bg-gradient-to-br from-blue-900/20 to-purple-900/20 rounded-full flex items-center justify-center mb-8 border border-gray-800/50 shadow-2xl">
-                      <div className="w-32 h-32 bg-gradient-to-br from-blue-500/10 to-purple-500/10 rounded-full flex items-center justify-center">
-                        <FaServer className="text-6xl text-gray-600" />
-                      </div>
-                    </div>
-                    <div className="text-gray-400 mb-8 text-xl">No active servers detected</div>
-                    <ParallaxTilt
-                      tiltMaxAngleX={15}
-                      tiltMaxAngleY={15}
-                      scale={1.1}
-                      glareEnable={true}
-                      glareMaxOpacity={0.3}
-                      className="relative"
-                    >
-                      <motion.button
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() => setShowCreateModal(true)}
-                        className="px-10 py-5 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 rounded-2xl text-xl font-bold shadow-2xl shadow-blue-500/30 relative overflow-hidden group"
-                      >
-                        <div className="absolute inset-0 bg-gradient-to-r from-blue-400/0 via-blue-400/20 to-blue-400/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
-                        <FaRocket className="inline-block mr-3 text-2xl" />
-                        Deploy First Server
-                      </motion.button>
-                    </ParallaxTilt>
-                  </div>
-                </motion.div>
+                <EmptyState 
+                  title="NO QUANTUM SERVERS DETECTED"
+                  description="Initiate your first quantum server instance"
+                  icon={<FaServer />}
+                  action={() => setShowCreateModal(true)}
+                  actionText="ACTIVATE QUANTUM SERVER"
+                  colorPalette={currentPalette}
+                />
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-12">
                   {servers.map((server, index) => (
-                    <motion.div
+                    <ServerCard 
                       key={server.id || index}
-                      initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                      animate={{ opacity: 1, scale: 1, y: 0 }}
-                      transition={{ delay: index * 0.1 }}
-                    >
-                      <ParallaxTilt
-                        tiltMaxAngleX={15}
-                        tiltMaxAngleY={15}
-                        scale={1.05}
-                        glareEnable={true}
-                        glareMaxOpacity={0.3}
-                        glareColor="#ffffff"
-                        glarePosition="all"
-                        className="relative group"
-                      >
-                        {/* Card Glow Effect */}
-                        <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-purple-500/10 rounded-3xl blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                        
-                        {/* Main Card */}
-                        <div className="relative bg-gradient-to-br from-gray-900/40 to-gray-800/40 backdrop-blur-xl rounded-3xl p-8 border border-gray-800/50 shadow-2xl hover:shadow-blue-500/20 transition-all duration-300 overflow-hidden">
-                          {/* Animated Border */}
-                          <div className="absolute inset-0 rounded-3xl p-[2px] bg-gradient-to-r from-blue-500/0 via-blue-500/30 to-purple-500/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500">
-                            <div className="absolute inset-0 rounded-3xl bg-gradient-to-r from-blue-500/0 via-blue-500/10 to-purple-500/0 animate-[gradient_3s_ease_infinite]" />
-                          </div>
-                          
-                          {/* Content */}
-                          <div className="relative z-10">
-                            <div className="flex justify-between items-start mb-6">
-                              <div className="flex-1">
-                                <div className="flex items-center space-x-3 mb-3">
-                                  <h3 className="text-2xl font-bold bg-gradient-to-r from-blue-300 to-cyan-300 bg-clip-text text-transparent truncate">
-                                    {server.name || 'Unnamed Server'}
-                                  </h3>
-                                  <div className={`px-3 py-1 rounded-full text-sm font-medium flex items-center space-x-2 ${
-                                    server.is_public 
-                                      ? 'bg-gradient-to-r from-emerald-900/30 to-green-900/30 text-emerald-300 border border-emerald-700/50' 
-                                      : 'bg-gradient-to-r from-gray-800/50 to-gray-900/50 text-gray-300 border border-gray-700/50'
-                                  }`}>
-                                    {server.is_public ? <FaGlobe /> : <FaLock />}
-                                    <span>{server.is_public ? 'Public' : 'Private'}</span>
-                                  </div>
-                                </div>
-                                <div className="flex items-center space-x-3">
-                                  <div className="px-3 py-1.5 bg-gradient-to-r from-blue-900/30 to-cyan-900/30 rounded-full text-sm border border-blue-700/30 flex items-center space-x-2">
-                                    <FaDatabase className="text-xs" />
-                                    <span>Server Instance</span>
-                                  </div>
-                                  {server.is_public && (
-                                    <div className="px-3 py-1.5 bg-gradient-to-r from-emerald-900/30 to-green-900/30 rounded-full text-sm border border-emerald-700/30 flex items-center space-x-2">
-                                      <FaStar className="text-xs" />
-                                      <span>Featured</span>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                              <div className="p-3 bg-gradient-to-br from-gray-800/50 to-gray-900/50 rounded-2xl border border-gray-700/50 shadow-lg">
-                                <FaServer className="text-3xl text-blue-400" />
-                              </div>
-                            </div>
-                            
-                            {server.description && (
-                              <div className="mb-8">
-                                <p className="text-gray-400 line-clamp-3 bg-gray-900/30 p-4 rounded-xl border border-gray-800/50">
-                                  {server.description}
-                                </p>
-                              </div>
-                            )}
-                            
-                            <div className="space-y-4 mb-8">
-                              <div className="flex items-center text-gray-400 bg-gray-900/30 p-4 rounded-xl border border-gray-800/30 group/item hover:bg-gray-900/40 transition-colursor-pointer">
-                                <div className="p-2 bg-blue-500/10 rounded-lg mr-3">
-                                  <FaClock className="text-blue-400" />
-                                </div>
-                                <div className="flex-1">
-                                  <div className="text-xs text-gray-500">Created</div>
-                                  <div className="font-medium">{formatDate(server.created_at)}</div>
-                                </div>
-                              </div>
-                              {server.renewal_date && (
-                                <div className="flex items-center text-gray-400 bg-gray-900/30 p-4 rounded-xl border border-gray-800/30 group/item hover:bg-gray-900/40 transition-colursor-pointer">
-                                  <div className="p-2 bg-cyan-500/10 rounded-lg mr-3">
-                                    <FaBolt className="text-cyan-400" />
-                                  </div>
-                                  <div className="flex-1">
-                                    <div className="text-xs text-gray-500">Renewal Date</div>
-                                    <div className="font-medium text-cyan-300">{formatDate(server.renewal_date)}</div>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                            
-                            <div className="flex space-x-3">
-                              <motion.button
-                                whileHover={{ scale: 1.05 }}
-                                whileTap={{ scale: 0.95 }}
-                                onClick={() => openEditModal(server)}
-                                className="flex-1 px-4 py-3 bg-gradient-to-r from-gray-800/50 to-gray-900/50 hover:from-gray-700/50 hover:to-gray-800/50 rounded-xl font-medium flex items-center justify-center space-x-3 border border-gray-700/50 group/btn"
-                              >
-                                <FaEdit className="group-hover/btn:rotate-12 transition-transform duration-300" />
-                                <span>Edit</span>
-                              </motion.button>
-                              <motion.button
-                                whileHover={{ scale: 1.05 }}
-                                whileTap={{ scale: 0.95 }}
-                                onClick={() => deleteServer(server.id)}
-                                className="flex-1 px-4 py-3 bg-gradient-to-r from-rose-900/30 to-red-900/30 hover:from-rose-800/40 hover:to-red-800/40 rounded-xl font-medium flex items-center justify-center space-x-3 border border-rose-700/30 group/btn"
-                              >
-                                <FaTrash className="group-hover/btn:scale-110 transition-transform duration-300" />
-                                <span>Delete</span>
-                              </motion.button>
-                            </div>
-                          </div>
-                        </div>
-                      </ParallaxTilt>
-                    </motion.div>
+                      server={server}
+                      index={index}
+                      colorPalette={currentPalette}
+                      onEdit={() => {
+                        setEditForm({
+                          serverId: server.id || '',
+                          name: server.name || '',
+                          description: server.description || '',
+                          privacy: server.is_public ? 'public' : 'private',
+                          serverType: server.type || 'quantum'
+                        });
+                        setShowEditModal(true);
+                      }}
+                      onDelete={() => deleteServer(server.id)}
+                    />
                   ))}
                 </div>
               )}
             </motion.div>
           )}
-        </AnimatePresence>
-
-        {/* Tokens Tab */}
-        <AnimatePresence mode="wait">
+          
           {activeTab === 'tokens' && (
             <motion.div
               key="tokens"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -30 }}
             >
               {tokens.length === 0 ? (
-                <motion.div 
-                  initial={{ scale: 0.9, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  className="text-center py-24"
-                >
-                  <div className="relative inline-block">
-                    <div className="w-48 h-48 mx-auto bg-gradient-to-br from-purple-900/20 to-pink-900/20 rounded-full flex items-center justify-center mb-8 border border-gray-800/50 shadow-2xl">
-                      <div className="w-32 h-32 bg-gradient-to-br from-purple-500/10 to-pink-500/10 rounded-full flex items-center justify-center">
-                        <SiJsonwebtokens className="text-6xl text-gray-600" />
-                      </div>
-                    </div>
-                    <div className="text-gray-400 mb-8 text-xl">No API tokens available</div>
-                    <ParallaxTilt
-                      tiltMaxAngleX={15}
-                      tiltMaxAngleY={15}
-                      scale={1.1}
-                      glareEnable={true}
-                      glareMaxOpacity={0.3}
-                      className="relative"
-                    >
-                      <motion.button
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() => setShowTokenModal(true)}
-                        className="px-10 py-5 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 rounded-2xl text-xl font-bold shadow-2xl shadow-purple-500/30 relative overflow-hidden group"
-                      >
-                        <div className="absolute inset-0 bg-gradient-to-r from-purple-400/0 via-purple-400/20 to-purple-400/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
-                        <FaKey className="inline-block mr-3 text-2xl" />
-                        Generate First Token
-                      </motion.button>
-                    </ParallaxTilt>
-                  </div>
-                </motion.div>
+                <EmptyState 
+                  title="NO NEURAL TOKENS GENERATED"
+                  description="Create your first quantum access token"
+                  icon={<SiJsonwebtokens />}
+                  action={() => setShowTokenModal(true)}
+                  actionText="GENERATE QUANTUM TOKEN"
+                  colorPalette={currentPalette}
+                />
               ) : (
-                <div className="space-y-8">
+                <div className="space-y-12">
                   {tokens.map((token, index) => (
-                    <motion.div
+                    <TokenCard 
                       key={token.id || index}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: index * 0.1 }}
-                    >
-                      <ParallaxTilt
-                        tiltMaxAngleX={10}
-                        tiltMaxAngleY={10}
-                        scale={1.03}
-                        glareEnable={true}
-                        glareMaxOpacity={0.2}
-                        glareColor="#ffffff"
-                        glarePosition="all"
-                        className="relative group"
-                      >
-                        {/* Card Glow Effect */}
-                        <div className="absolute inset-0 bg-gradient-to-br from-purple-500/10 to-pink-500/10 rounded-3xl blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                        
-                        {/* Main Card */}
-                        <div className="relative bg-gradient-to-br from-gray-900/40 to-gray-800/40 backdrop-blur-xl rounded-3xl p-8 border border-gray-800/50 shadow-2xl hover:shadow-purple-500/20 transition-all duration-300 overflow-hidden">
-                          {/* Animated Border */}
-                          <div className="absolute inset-0 rounded-3xl p-[2px] bg-gradient-to-r from-purple-500/0 via-purple-500/30 to-pink-500/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500">
-                            <div className="absolute inset-0 rounded-3xl bg-gradient-to-r from-purple-500/0 via-purple-500/10 to-pink-500/0 animate-[gradient_3s_ease_infinite]" />
-                          </div>
-                          
-                          <div className="relative z-10">
-                            {/* Header Section */}
-                            <div className="flex justify-between items-start mb-8">
-                              <div>
-                                <div className="flex items-center space-x-3 mb-3">
-                                  <div className="p-2 bg-gradient-to-br from-purple-500/10 to-pink-500/10 rounded-xl">
-                                    <FaKey className="text-2xl text-yellow-400" />
-                                  </div>
-                                  <div>
-                                    <h3 className="text-2xl font-bold bg-gradient-to-r from-purple-300 to-pink-300 bg-clip-text text-transparent">
-                                      API Access Token
-                                    </h3>
-                                    <p className="text-gray-400 flex items-center text-sm">
-                                      <FaDatabase className="mr-2" />
-                                      Resource: <span className="ml-1 font-semibold text-purple-300">{token.table_name || 'unknown'}</span>
-                                    </p>
-                                  </div>
-                                </div>
-                                {token.record_name && (
-                                  <p className="text-gray-400 text-sm mt-2">
-                                    <FaCog className="inline mr-2" />
-                                    Record: <span className="text-cyan-300">{token.record_name}</span>
-                                  </p>
-                                )}
-                              </div>
-                              <div className={`px-4 py-2 rounded-full text-sm font-bold ${
-                                token.status === 'active' 
-                                  ? 'bg-gradient-to-r from-emerald-900/30 to-green-900/30 text-emerald-300 border border-emerald-700/50 shadow-lg shadow-emerald-500/10' 
-                                  : 'bg-gradient-to-r from-gray-800/50 to-gray-900/50 text-gray-300 border border-gray-700/50'
-                              }`}>
-                                <div className="flex items-center space-x-2">
-                                  <div className={`w-2 h-2 rounded-full ${token.status === 'active' ? 'bg-emerald-400 animate-pulse' : 'bg-gray-500'}`} />
-                                  <span>{token.status || 'unknown'}</span>
-                                </div>
-                              </div>
-                            </div>
-                            
-                            {/* Permissions Section */}
-                            <div className="mb-8">
-                              <div className="text-sm text-gray-500 mb-4 flex items-center">
-                                <FaShieldAlt className="mr-2 text-cyan-400" />
-                                <span>Access Permissions:</span>
-                              </div>
-                              <div className="grid grid-cols-3 gap-4">
-                                {token.permissions?.read && (
-                                  <motion.div 
-                                    whileHover={{ scale: 1.05, y: -2 }}
-                                    className="px-4 py-3 bg-gradient-to-r from-blue-900/30 to-blue-800/30 text-blue-300 rounded-xl border border-blue-700/50 flex items-center justify-center space-x-3 shadow-lg shadow-blue-500/10"
-                                  >
-                                    <FaEye />
-                                    <span className="font-medium">Read</span>
-                                  </motion.div>
-                                )}
-                                {token.permissions?.write && (
-                                  <motion.div 
-                                    whileHover={{ scale: 1.05, y: -2 }}
-                                    className="px-4 py-3 bg-gradient-to-r from-emerald-900/30 to-green-900/30 text-emerald-300 rounded-xl border border-emerald-700/50 flex items-center justify-center space-x-3 shadow-lg shadow-emerald-500/10"
-                                  >
-                                    <FaEdit />
-                                    <span className="font-medium">Write</span>
-                                  </motion.div>
-                                )}
-                                {token.permissions?.delete && (
-                                  <motion.div 
-                                    whileHover={{ scale: 1.05, y: -2 }}
-                                    className="px-4 py-3 bg-gradient-to-r from-rose-900/30 to-red-900/30 text-rose-300 rounded-xl border border-rose-700/50 flex items-center justify-center space-x-3 shadow-lg shadow-rose-500/10"
-                                  >
-                                    <FaTrash />
-                                    <span className="font-medium">Delete</span>
-                                  </motion.div>
-                                )}
-                              </div>
-                            </div>
-                            
-                            {/* Token URL Section */}
-                            {token.vercel_token_link && (
-                              <div className="mb-8">
-                                <div className="text-sm text-gray-500 mb-3 flex items-center">
-                                  <FaLink className="mr-2" />
-                                  <span>Token Endpoint:</span>
-                                </div>
-                                <div className="flex items-center">
-                                  <code className="flex-1 bg-gradient-to-r from-gray-900 to-black p-4 rounded-xl text-sm border border-gray-700/50 truncate font-mono shadow-inner">
-                                    {token.vercel_token_link}
-                                  </code>
-                                  <motion.button
-                                    whileHover={{ scale: 1.05 }}
-                                    whileTap={{ scale: 0.95 }}
-                                    onClick={() => copyToClipboard(token.vercel_token_link)}
-                                    className="ml-4 px-6 py-3 bg-gradient-to-r from-gray-800/50 to-gray-900/50 hover:from-gray-700/50 hover:to-gray-800/50 rounded-xl font-medium flex items-center space-x-3 border border-gray-700/50"
-                                  >
-                                    <FaCopy />
-                                    <span>Copy</span>
-                                  </motion.button>
-                                </div>
-                              </div>
-                            )}
-                            
-                            {/* Metadata Section */}
-                            <div className="grid grid-cols-2 gap-6 mb-8">
-                              <div className="bg-gradient-to-br from-gray-900/30 to-gray-800/30 p-4 rounded-xl border border-gray-700/50">
-                                <div className="text-sm text-gray-500 mb-2 flex items-center">
-                                  <FaClock className="mr-2" />
-                                  <span>Created</span>
-                                </div>
-                                <div className="text-gray-300 font-medium">{formatDate(token.created_at)}</div>
-                              </div>
-                              <div className="bg-gradient-to-br from-gray-900/30 to-gray-800/30 p-4 rounded-xl border border-gray-700/50">
-                                <div className="text-sm text-gray-500 mb-2 flex items-center">
-                                  <FaBolt className="mr-2" />
-                                  <span>Expires</span>
-                                </div>
-                                <div className={`font-medium ${token.status === 'active' ? 'text-cyan-300' : 'text-gray-400'}`}>
-                                  {formatDate(token.expires_at)}
-                                </div>
-                              </div>
-                            </div>
-                            
-                            {/* Action Button */}
-                            <motion.button
-                              whileHover={{ scale: 1.02 }}
-                              whileTap={{ scale: 0.98 }}
-                              onClick={() => revokeToken(token.id)}
-                              className="w-full px-6 py-4 bg-gradient-to-r from-rose-900/30 to-red-900/30 hover:from-rose-800/40 hover:to-red-800/40 rounded-xl font-bold flex items-center justify-center space-x-3 border border-rose-700/30 shadow-lg shadow-rose-500/10 group/revoke"
-                            >
-                              <FaTrash className="group-hover/revoke:scale-110 transition-transform duration-300" />
-                              <span>Revoke Token</span>
-                            </motion.button>
-                          </div>
-                        </div>
-                      </ParallaxTilt>
-                    </motion.div>
+                      token={token}
+                      index={index}
+                      colorPalette={currentPalette}
+                    />
                   ))}
                 </div>
               )}
@@ -1077,371 +943,874 @@ const ServerProfileManager = () => {
           )}
         </AnimatePresence>
       </motion.main>
-
-      {/* Immersive Modals */}
-      <AnimatePresence>
-        {showCreateModal && (
-          <ModalOverlay onClose={() => setShowCreateModal(false)}>
-            <ModalContent title="Launch New Server" icon={<FaRocket />} gradient="from-blue-400 to-cyan-400">
-              <div className="space-y-6">
-                <FormInput
-                  label="Server Name"
-                  value={serverForm.name}
-                  onChange={(e) => setServerForm({...serverForm, name: e.target.value})}
-                  placeholder="Enter a unique server name..."
-                  icon={<FaServer className="text-blue-400" />}
-                />
-                
-                <FormTextarea
-                  label="Description (Optional)"
-                  value={serverForm.description}
-                  onChange={(e) => setServerForm({...serverForm, description: e.target.value})}
-                  placeholder="Describe your server's purpose..."
-                  rows="3"
-                  icon={<FaTerminal className="text-cyan-400" />}
-                />
-                
-                <FormSelect
-                  label="Server Visibility"
-                  value={serverForm.privacy}
-                  onChange={(e) => setServerForm({...serverForm, privacy: e.target.value})}
-                  options={[
-                    { value: 'public', label: '🌐 Public - Accessible to everyone' },
-                    { value: 'private', label: '🔒 Private - Only accessible to you' }
-                  ]}
-                  icon={serverForm.privacy === 'public' ? <FaGlobe className="text-emerald-400" /> : <FaLock className="text-amber-400" />}
-                />
-                
-                <FormCheckbox
-                  label="Generate API token for immediate access"
-                  checked={serverForm.generateToken}
-                  onChange={(e) => setServerForm({...serverForm, generateToken: e.target.checked})}
-                  id="generateToken"
-                />
-              </div>
-              
-              <div className="flex space-x-4 mt-10">
-                <ModalButton onClick={() => setShowCreateModal(false)} variant="secondary">
-                  Cancel
-                </ModalButton>
-                <ModalButton onClick={createServer} variant="primary">
-                  <FaRocket className="mr-2" />
-                  Launch Server
-                </ModalButton>
-              </div>
-            </ModalContent>
-          </ModalOverlay>
-        )}
-
-        {showTokenModal && (
-          <ModalOverlay onClose={() => setShowTokenModal(false)}>
-            <ModalContent title="Generate API Token" icon={<SiJsonwebtokens />} gradient="from-purple-400 to-pink-400">
-              <div className="space-y-6">
-                <FormSelect
-                  label="Resource Type"
-                  value={tokenForm.table_name}
-                  onChange={(e) => setTokenForm({...tokenForm, table_name: e.target.value})}
-                  options={[
-                    { value: 'servers', label: '🖥️ Servers - Full server management' },
-                    { value: 'users', label: '👤 Users - User data access' },
-                    { value: 'boteos', label: '📦 Boteos - Package management' },
-                    { value: 'bots', label: '🤖 Bots - Bot control systems' }
-                  ]}
-                  icon={<FaDatabase className="text-purple-400" />}
-                />
-                
-                <FormInput
-                  label="Resource ID (Optional)"
-                  value={tokenForm.record_id}
-                  onChange={(e) => setTokenForm({...tokenForm, record_id: e.target.value})}
-                  placeholder="Leave empty for all resources"
-                  description="Specify UUID for granular access control"
-                  icon={<FaKey className="text-pink-400" />}
-                />
-                
-                <div>
-                  <label className="block text-sm font-medium mb-3 text-gray-300 flex items-center">
-                    <FaShieldAlt className="mr-2 text-cyan-400" />
-                    <span>Access Permissions</span>
-                  </label>
-                  <div className="grid grid-cols-3 gap-4">
-                    <PermissionToggle
-                      label="Read"
-                      checked={tokenForm.permissions.read}
-                      onChange={(checked) => setTokenForm({
-                        ...tokenForm,
-                        permissions: {...tokenForm.permissions, read: checked}
-                      })}
-                      icon={<FaEye />}
-                      color="blue"
-                    />
-                    <PermissionToggle
-                      label="Write"
-                      checked={tokenForm.permissions.write}
-                      onChange={(checked) => setTokenForm({
-                        ...tokenForm,
-                        permissions: {...tokenForm.permissions, write: checked}
-                      })}
-                      icon={<FaEdit />}
-                      color="green"
-                    />
-                    <PermissionToggle
-                      label="Delete"
-                      checked={tokenForm.permissions.delete}
-                      onChange={(checked) => setTokenForm({
-                        ...tokenForm,
-                        permissions: {...tokenForm.permissions, delete: checked}
-                      })}
-                      icon={<FaTrash />}
-                      color="red"
-                    />
-                  </div>
-                </div>
-                
-                <FormInput
-                  label="Expiration Time (Hours)"
-                  type="number"
-                  value={tokenForm.expires_in_hours}
-                  onChange={(e) => setTokenForm({...tokenForm, expires_in_hours: parseInt(e.target.value) || 24})}
-                  min="1"
-                  max="8760"
-                  description="Token validity duration (1-8760 hours)"
-                  icon={<FaClock className="text-amber-400" />}
-                />
-              </div>
-              
-              <div className="flex space-x-4 mt-10">
-                <ModalButton onClick={() => setShowTokenModal(false)} variant="secondary">
-                  Cancel
-                </ModalButton>
-                <ModalButton onClick={generateToken} variant="primary">
-                  <SiJsonwebtokens className="mr-2" />
-                  Generate Token
-                </ModalButton>
-              </div>
-            </ModalContent>
-          </ModalOverlay>
-        )}
-
-        {showEditModal && (
-          <ModalOverlay onClose={() => setShowEditModal(false)}>
-            <ModalContent title="Update Server" icon={<FaEdit />} gradient="from-blue-400 to-cyan-400">
-              <div className="space-y-6">
-                <FormInput
-                  label="Server Name"
-                  value={editForm.name}
-                  onChange={(e) => setEditForm({...editForm, name: e.target.value})}
-                  icon={<FaServer className="text-blue-400" />}
-                />
-                
-                <FormTextarea
-                  label="Description (Optional)"
-                  value={editForm.description}
-                  onChange={(e) => setEditForm({...editForm, description: e.target.value})}
-                  rows="3"
-                  icon={<FaTerminal className="text-cyan-400" />}
-                />
-                
-                <FormSelect
-                  label="Server Visibility"
-                  value={editForm.privacy}
-                  onChange={(e) => setEditForm({...editForm, privacy: e.target.value})}
-                  options={[
-                    { value: 'public', label: '🌐 Public - Accessible to everyone' },
-                    { value: 'private', label: '🔒 Private - Only accessible to you' }
-                  ]}
-                  icon={editForm.privacy === 'public' ? <FaGlobe className="text-emerald-400" /> : <FaLock className="text-amber-400" />}
-                />
-              </div>
-              
-              <div className="flex space-x-4 mt-10">
-                <ModalButton onClick={() => setShowEditModal(false)} variant="secondary">
-                  Cancel
-                </ModalButton>
-                <ModalButton onClick={updateServer} variant="primary">
-                  <FaEdit className="mr-2" />
-                  Update Server
-                </ModalButton>
-              </div>
-            </ModalContent>
-          </ModalOverlay>
-        )}
-      </AnimatePresence>
-
-      {/* Custom CSS for animations */}
+      
+      {/* Palette Modal */}
+      {showPaletteModal && (
+        <PaletteModal 
+          currentPalette={colorPalette}
+          setColorPalette={setColorPalette}
+          onClose={() => setShowPaletteModal(false)}
+          palettes={PSYCHEDELIC_PALETTES}
+        />
+      )}
+      
+      {/* Create Server Modal */}
+      {showCreateModal && (
+        <CreateServerModal 
+          form={serverForm}
+          onChange={setServerForm}
+          onSubmit={createServer}
+          onClose={() => setShowCreateModal(false)}
+          colorPalette={currentPalette}
+        />
+      )}
+      
+      {/* Edit Server Modal */}
+      {showEditModal && (
+        <EditServerModal 
+          form={editForm}
+          onChange={setEditForm}
+          onSubmit={updateServer}
+          onClose={() => setShowEditModal(false)}
+          colorPalette={currentPalette}
+        />
+      )}
+      
+      {/* Token Modal */}
+      {showTokenModal && (
+        <TokenModal 
+          form={tokenForm}
+          onChange={setTokenForm}
+          onSubmit={() => {}}
+          onClose={() => setShowTokenModal(false)}
+          colorPalette={currentPalette}
+        />
+      )}
+      
+      {/* Global Styles */}
       <style jsx global>{`
         @keyframes gradient {
-          0%, 100% { opacity: 0.3; }
-          50% { opacity: 0.6; }
+          0%, 100% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+        }
+        
+        @keyframes float {
+          0%, 100% { transform: translateY(0px) rotate(0deg); }
+          50% { transform: translateY(-30px) rotate(180deg); }
+        }
+        
+        @keyframes pulse-glow {
+          0%, 100% { 
+            opacity: 0.5;
+            filter: blur(5px);
+          }
+          50% { 
+            opacity: 1;
+            filter: blur(10px);
+          }
+        }
+        
+        @keyframes shimmer {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(100%); }
+        }
+        
+        .animate-float {
+          animation: float 6s ease-in-out infinite;
+        }
+        
+        .animate-pulse-glow {
+          animation: pulse-glow 2s ease-in-out infinite;
+        }
+        
+        .animate-shimmer {
+          animation: shimmer 2s infinite;
+        }
+        
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+          width: 16px;
+          background: transparent;
+        }
+        
+        ::-webkit-scrollbar-track {
+          background: ${currentPalette.bg};
+          border-radius: 20px;
+          border: 2px solid ${currentPalette.primary[0]};
+        }
+        
+        ::-webkit-scrollbar-thumb {
+          background: linear-gradient(135deg, ${currentPalette.primary[0]}, ${currentPalette.primary[1]});
+          border-radius: 20px;
+          border: 3px solid ${currentPalette.accent[0]};
+          box-shadow: 0 0 20px ${currentPalette.primary[0]};
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+          background: linear-gradient(135deg, ${currentPalette.primary[1]}, ${currentPalette.primary[2]});
+          box-shadow: 0 0 30px ${currentPalette.primary[1]};
+        }
+        
+        /* Selection color */
+        ::selection {
+          background: ${currentPalette.primary[0]}80;
+          color: white;
+          text-shadow: 0 0 10px white;
+        }
+        
+        /* Smooth transitions */
+        * {
+          transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55) !important;
         }
       `}</style>
     </div>
   );
 };
 
-// Enhanced Modal Components
-const ModalOverlay = ({ children, onClose }) => (
-  <motion.div
-    initial={{ opacity: 0 }}
-    animate={{ opacity: 1 }}
-    exit={{ opacity: 0 }}
-    className="fixed inset-0 bg-black/80 backdrop-blur-2xl flex items-center justify-center z-50 p-4"
-    onClick={onClose}
-  >
-    <div className="absolute inset-0" onClick={e => e.stopPropagation()} />
-    <div className="relative z-10" onClick={e => e.stopPropagation()}>
-      {children}
-    </div>
-  </motion.div>
-);
-
-const ModalContent = ({ children, title, icon, gradient }) => (
-  <motion.div
-    initial={{ scale: 0.8, opacity: 0, y: 50 }}
-    animate={{ scale: 1, opacity: 1, y: 0 }}
-    exit={{ scale: 0.8, opacity: 0, y: 50 }}
-    className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-3xl p-8 w-full max-w-lg border border-gray-700/50 shadow-2xl relative overflow-hidden"
-  >
-    {/* Modal Background Glow */}
-    <div className={`absolute inset-0 bg-gradient-to-br ${gradient}/5 via-transparent to-transparent`} />
-    
-    <div className="relative z-10">
-      <div className="flex items-center space-x-3 mb-8">
-        <div className={`p-3 bg-gradient-to-br ${gradient}/10 rounded-2xl`}>
-          {React.cloneElement(icon, { className: "text-2xl" })}
-        </div>
-        <h2 className={`text-3xl font-bold bg-gradient-to-r ${gradient} bg-clip-text text-transparent`}>
-          {title}
-        </h2>
-      </div>
-      {children}
-    </div>
-  </motion.div>
-);
-
-const ModalButton = ({ children, onClick, variant = 'primary' }) => {
-  const variants = {
-    primary: 'bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 shadow-lg shadow-blue-500/25',
-    secondary: 'bg-gradient-to-r from-gray-800/50 to-gray-900/50 hover:from-gray-700/50 hover:to-gray-800/50 border border-gray-700/50',
-    danger: 'bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 shadow-lg shadow-rose-500/25'
-  };
-
+// Server Card Component - PURE COLOR EXPLOSION
+const ServerCard = ({ server, index, colorPalette, onEdit, onDelete }) => {
+  const [isHovered, setIsHovered] = useState(false);
+  
   return (
-    <motion.button
-      whileHover={{ scale: 1.05 }}
-      whileTap={{ scale: 0.95 }}
-      onClick={onClick}
-      className={`flex-1 px-6 py-4 rounded-xl font-bold flex items-center justify-center ${variants[variant]}`}
+    <motion.div
+      initial={{ opacity: 0, scale: 0.8, y: 60, rotateX: 45 }}
+      animate={{ opacity: 1, scale: 1, y: 0, rotateX: 0 }}
+      transition={{ delay: index * 0.1, type: "spring", damping: 20 }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
     >
-      {children}
-    </motion.button>
+      <ParallaxTilt
+        tiltMaxAngleX={15}
+        tiltMaxAngleY={15}
+        scale={1.1}
+        glareEnable={true}
+        glareMaxOpacity={0.8}
+        glareColor={colorPalette.primary[0]}
+        className="relative"
+      >
+        <div className="relative rounded-5xl overflow-hidden group cursor-pointer">
+          {/* Animated Gradient Background */}
+          <motion.div 
+            animate={{ 
+              backgroundPosition: ["0% 0%", "100% 100%", "0% 0%"]
+            }}
+            transition={{ duration: 10, repeat: Infinity }}
+            className="absolute inset-0"
+            style={{
+              background: `linear-gradient(135deg, 
+                ${colorPalette.primary[0]}30, 
+                ${colorPalette.primary[1]}30, 
+                ${colorPalette.primary[2]}30, 
+                ${colorPalette.primary[3]}30, 
+                ${colorPalette.primary[4]}30
+              )`,
+              backgroundSize: '400% 400%'
+            }}
+          />
+          
+          {/* Pulsing Border */}
+          <motion.div
+            animate={{ 
+              borderColor: colorPalette.primary,
+              boxShadow: [
+                `0 0 40px ${colorPalette.primary[0]}, inset 0 0 40px ${colorPalette.secondary[0]}`,
+                `0 0 80px ${colorPalette.primary[1]}, inset 0 0 80px ${colorPalette.secondary[1]}`,
+                `0 0 40px ${colorPalette.primary[0]}, inset 0 0 40px ${colorPalette.secondary[0]}`
+              ]
+            }}
+            transition={{ duration: 3, repeat: Infinity }}
+            className="absolute inset-0 rounded-5xl border-4"
+            style={{ borderColor: colorPalette.primary[0] }}
+          />
+          
+          {/* Content */}
+          <div className="relative z-10 p-12">
+            {/* Header */}
+            <div className="flex justify-between items-start mb-12">
+              <div className="flex-1">
+                <div className="flex items-center space-x-6 mb-8">
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+                    className="p-6 rounded-3xl flex-shrink-0"
+                    style={{
+                      background: `linear-gradient(135deg, ${colorPalette.primary[0]}40, ${colorPalette.primary[1]}20)`,
+                      border: `3px solid ${colorPalette.primary[2]}`,
+                      boxShadow: `0 0 40px ${colorPalette.primary[2]}`
+                    }}
+                  >
+                    <FaServer className="text-5xl" style={{ color: colorPalette.primary[3] }} />
+                  </motion.div>
+                  
+                  <div>
+                    <h3 className="text-4xl font-black mb-4 tracking-tight" style={{ 
+                      color: colorPalette.primary[0],
+                      textShadow: `0 0 20px ${colorPalette.primary[0]}`
+                    }}>
+                      {server.name || 'QUANTUM SERVER'}
+                    </h3>
+                    
+                    <div className="flex flex-wrap gap-4">
+                      <motion.span 
+                        whileHover={{ scale: 1.1 }}
+                        className="px-6 py-3 rounded-full text-lg font-black flex items-center space-x-3"
+                        style={{
+                          background: server.is_public 
+                            ? `linear-gradient(135deg, ${colorPalette.secondary[1]}, ${colorPalette.secondary[2]})`
+                            : `linear-gradient(135deg, ${colorPalette.primary[3]}, ${colorPalette.primary[4]})`,
+                          border: `2px solid ${server.is_public ? colorPalette.secondary[3] : colorPalette.primary[5]}`,
+                          boxShadow: `0 0 30px ${server.is_public ? colorPalette.secondary[1] : colorPalette.primary[3]}`,
+                          color: 'white'
+                        }}
+                      >
+                        {server.is_public ? <FaGlobe /> : <FaLock />}
+                        <span>{server.is_public ? 'PUBLIC' : 'PRIVATE'}</span>
+                      </motion.span>
+                      
+                      <motion.span 
+                        whileHover={{ scale: 1.1 }}
+                        className="px-6 py-3 rounded-full text-lg font-black flex items-center space-x-3"
+                        style={{
+                          background: `linear-gradient(135deg, ${colorPalette.primary[2]}, ${colorPalette.primary[3]})`,
+                          border: `2px solid ${colorPalette.primary[4]}`,
+                          boxShadow: `0 0 30px ${colorPalette.primary[2]}`,
+                          color: 'white'
+                        }}
+                      >
+                        <FaBolt className="animate-pulse" />
+                        <span>QUANTUM</span>
+                      </motion.span>
+                    </div>
+                  </div>
+                </div>
+                
+                {server.description && (
+                  <div className="mb-10">
+                    <p className="text-2xl p-8 rounded-4xl" style={{
+                      background: `linear-gradient(135deg, ${colorPalette.primary[0]}20, ${colorPalette.primary[1]}10)`,
+                      border: `2px solid ${colorPalette.primary[2]}40`,
+                      color: colorPalette.secondary[0],
+                      textShadow: `0 0 10px ${colorPalette.secondary[0]}`
+                    }}>
+                      {server.description}
+                    </p>
+                  </div>
+                )}
+                
+                {/* Stats */}
+                <div className="grid grid-cols-2 gap-8 mb-12">
+                  <div className="p-8 rounded-4xl" style={{
+                    background: `linear-gradient(135deg, ${colorPalette.primary[0]}30, ${colorPalette.primary[1]}20)`,
+                    border: `2px solid ${colorPalette.primary[2]}`,
+                    boxShadow: `0 0 30px ${colorPalette.primary[0]}`
+                  }}>
+                    <div className="text-lg mb-3 flex items-center space-x-3" style={{ color: colorPalette.secondary[1] }}>
+                      <FaClock />
+                      <span className="font-black">CREATED</span>
+                    </div>
+                    <div className="text-2xl font-black" style={{ color: colorPalette.accent[0] }}>
+                      {new Date(server.created_at).toLocaleDateString('en-US', { 
+                        month: 'short', 
+                        day: 'numeric',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </div>
+                  </div>
+                  
+                  <div className="p-8 rounded-4xl" style={{
+                    background: `linear-gradient(135deg, ${colorPalette.primary[1]}30, ${colorPalette.primary[2]}20)`,
+                    border: `2px solid ${colorPalette.primary[3]}`,
+                    boxShadow: `0 0 30px ${colorPalette.primary[1]}`
+                  }}>
+                    <div className="text-lg mb-3 flex items-center space-x-3" style={{ color: colorPalette.secondary[2] }}>
+                      <FaBolt className="animate-pulse" />
+                      <span className="font-black">STATUS</span>
+                    </div>
+                    <div className="text-2xl font-black flex items-center space-x-4">
+                      <motion.div
+                        animate={{ scale: [1, 1.2, 1] }}
+                        transition={{ duration: 1, repeat: Infinity }}
+                        className="w-4 h-4 rounded-full"
+                        style={{ 
+                          background: `linear-gradient(135deg, ${colorPalette.secondary[0]}, ${colorPalette.secondary[1]})`,
+                          boxShadow: `0 0 20px ${colorPalette.secondary[0]}`
+                        }}
+                      />
+                      <span style={{ color: colorPalette.accent[1] }}>ACTIVE</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            {/* Actions */}
+            <div className="flex space-x-8">
+              <motion.button
+                whileHover={{ scale: 1.05, y: -4 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={onEdit}
+                className="flex-1 px-10 py-6 rounded-4xl text-2xl font-black flex items-center justify-center space-x-4 group"
+                style={{
+                  background: `linear-gradient(135deg, ${colorPalette.primary[2]}40, ${colorPalette.primary[3]}20)`,
+                  border: `3px solid ${colorPalette.primary[4]}`,
+                  boxShadow: `0 0 40px ${colorPalette.primary[2]}`,
+                  color: colorPalette.primary[2]
+                }}
+              >
+                <FaEdit className="text-3xl group-hover:rotate-12 transition-transform" />
+                <span>EDIT</span>
+              </motion.button>
+              
+              <motion.button
+                whileHover={{ scale: 1.05, y: -4 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={onDelete}
+                className="flex-1 px-10 py-6 rounded-4xl text-2xl font-black flex items-center justify-center space-x-4 group"
+                style={{
+                  background: `linear-gradient(135deg, #FF006640, #FF330020)`,
+                  border: `3px solid #FF0000`,
+                  boxShadow: `0 0 40px #FF0000`,
+                  color: '#FF0000'
+                }}
+              >
+                <FaTrash className="text-3xl group-hover:scale-110 transition-transform" />
+                <span>DELETE</span>
+              </motion.button>
+            </div>
+          </div>
+        </div>
+      </ParallaxTilt>
+    </motion.div>
   );
 };
 
-const FormInput = ({ label, value, onChange, placeholder, type = 'text', icon, description, ...props }) => (
-  <div>
-    <label className="block text-sm font-medium mb-3 text-gray-300 flex items-center space-x-2">
-      {icon && <span>{icon}</span>}
-      <span>{label}</span>
-    </label>
-    <input
-      type={type}
-      value={value}
-      onChange={onChange}
-      className="w-full bg-gradient-to-r from-gray-900 to-black border border-gray-700/50 rounded-xl px-5 py-4 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent placeholder-gray-500"
-      placeholder={placeholder}
-      {...props}
-    />
-    {description && (
-      <p className="text-xs text-gray-500 mt-2">{description}</p>
-    )}
-  </div>
-);
-
-const FormTextarea = ({ label, value, onChange, placeholder, rows, icon }) => (
-  <div>
-    <label className="block text-sm font-medium mb-3 text-gray-300 flex items-center space-x-2">
-      {icon && <span>{icon}</span>}
-      <span>{label}</span>
-    </label>
-    <textarea
-      value={value}
-      onChange={onChange}
-      className="w-full bg-gradient-to-r from-gray-900 to-black border border-gray-700/50 rounded-xl px-5 py-4 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent placeholder-gray-500 resize-none"
-      placeholder={placeholder}
-      rows={rows}
-    />
-  </div>
-);
-
-const FormSelect = ({ label, value, onChange, options, icon }) => (
-  <div>
-    <label className="block text-sm font-medium mb-3 text-gray-300 flex items-center space-x-2">
-      {icon && <span>{icon}</span>}
-      <span>{label}</span>
-    </label>
-    <select
-      value={value}
-      onChange={onChange}
-      className="w-full bg-gradient-to-r from-gray-900 to-black border border-gray-700/50 rounded-xl px-5 py-4 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent appearance-none cursor-pointer"
-    >
-      {options.map(option => (
-        <option key={option.value} value={option.value} className="bg-gray-900">
-          {option.label}
-        </option>
-      ))}
-    </select>
-  </div>
-);
-
-const FormCheckbox = ({ label, checked, onChange, id }) => (
-  <label className="flex items-center space-x-3 cursor-pointer group">
-    <div className="relative">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={onChange}
-        id={id}
-        className="sr-only"
-      />
-      <div className={`w-7 h-7 rounded-xl border-2 flex items-center justify-center transition-all duration-300 group-hover:scale-110 ${
-        checked 
-          ? 'bg-gradient-to-r from-blue-500 to-cyan-500 border-transparent' 
-          : 'bg-gray-900 border-gray-700'
-      }`}>
-        {checked && <FaCheck className="text-white text-sm" />}
-      </div>
-    </div>
-    <span className="text-gray-300 group-hover:text-white transition-colors">{label}</span>
-  </label>
-);
-
-const PermissionToggle = ({ label, checked, onChange, icon, color }) => {
-  const colors = {
-    blue: 'from-blue-900/40 to-blue-800/40 border-blue-700/60 text-blue-300 shadow-blue-500/20',
-    green: 'from-emerald-900/40 to-green-900/40 border-emerald-700/60 text-emerald-300 shadow-emerald-500/20',
-    red: 'from-rose-900/40 to-red-900/40 border-rose-700/60 text-rose-300 shadow-rose-500/20',
-  };
-
+// Empty State Component
+const EmptyState = ({ title, description, icon, action, actionText, colorPalette }) => {
   return (
-    <motion.label 
-      whileHover={{ scale: 1.05 }}
-      whileTap={{ scale: 0.95 }}
-      className={`flex flex-col items-center justify-center p-4 rounded-2xl border-2 cursor-pointer transition-all duration-300 shadow-lg ${
-        checked 
-          ? `${colors[color]} bg-gradient-to-br` 
-          : 'bg-gray-900/40 border-gray-700/50 text-gray-500'
-      }`}
+    <motion.div 
+      initial={{ scale: 0.9, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      className="text-center py-40"
     >
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        className="sr-only"
+      <div className="relative inline-block">
+        {/* Orbital Rings */}
+        {colorPalette.primary.map((color, i) => (
+          <motion.div
+            key={i}
+            animate={{ 
+              rotate: 360,
+              scale: [1, 1.1, 1]
+            }}
+            transition={{ 
+              duration: 15 + i * 3,
+              repeat: Infinity,
+              ease: "linear"
+            }}
+            className="absolute -inset-24 rounded-full"
+            style={{
+              border: `6px solid ${color}${Math.floor(20 + i * 10)}`,
+              filter: 'blur(10px)'
+            }}
+          />
+        ))}
+        
+        {/* Central Icon */}
+        <div className="relative w-96 h-96 mx-auto mb-16 rounded-full flex items-center justify-center" style={{
+          background: `radial-gradient(circle, ${colorPalette.primary[0]}40, ${colorPalette.primary[1]}20, transparent 70%)`,
+          border: `8px solid ${colorPalette.primary[2]}`,
+          boxShadow: `
+            0 0 100px ${colorPalette.primary[0]},
+            0 0 200px ${colorPalette.primary[1]},
+            inset 0 0 100px ${colorPalette.primary[2]}
+          `
+        }}>
+          <div className="text-9xl" style={{ color: colorPalette.primary[3] }}>
+            {icon}
+          </div>
+        </div>
+        
+        <h3 className="text-6xl font-black mb-10 tracking-tighter" style={{ 
+          color: colorPalette.primary[0],
+          textShadow: `0 0 30px ${colorPalette.primary[0]}`
+        }}>
+          {title}
+        </h3>
+        
+        <p className="text-3xl mb-16" style={{ 
+          color: colorPalette.secondary[0],
+          textShadow: `0 0 20px ${colorPalette.secondary[0]}`
+        }}>
+          {description}
+        </p>
+        
+        <ParallaxTilt
+          tiltMaxAngleX={20}
+          tiltMaxAngleY={20}
+          scale={1.15}
+          glareEnable={true}
+          glareMaxOpacity={0.9}
+          className="relative"
+        >
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={action}
+            className="relative group"
+          >
+            <motion.div
+              animate={{ 
+                scale: [1, 1.1, 1],
+                boxShadow: [
+                  `0 0 80px ${colorPalette.primary[0]}`,
+                  `0 0 120px ${colorPalette.primary[1]}`,
+                  `0 0 80px ${colorPalette.primary[0]}`
+                ]
+              }}
+              transition={{ duration: 2, repeat: Infinity }}
+              className="absolute inset-0 rounded-5xl blur-3xl opacity-80"
+              style={{ background: `linear-gradient(135deg, ${colorPalette.primary[0]}, ${colorPalette.primary[1]})` }}
+            />
+            
+            <div className="relative px-24 py-8 rounded-5xl font-black text-4xl flex items-center justify-center space-x-8 overflow-hidden" style={{
+              background: `linear-gradient(135deg, ${colorPalette.primary[0]}, ${colorPalette.primary[1]}, ${colorPalette.primary[2]})`,
+              border: `6px solid ${colorPalette.primary[3]}`,
+              boxShadow: `0 0 100px ${colorPalette.primary[0]}`,
+              color: 'white'
+            }}>
+              <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/40 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
+              <span className="tracking-widest">{actionText}</span>
+              <FaRocket className="text-5xl animate-bounce" />
+            </div>
+          </motion.button>
+        </ParallaxTilt>
+      </div>
+    </motion.div>
+  );
+};
+
+// Palette Modal Component
+const PaletteModal = ({ currentPalette, setColorPalette, onClose, palettes }) => {
+  return (
+    <div className="fixed inset-0 z-[999] flex items-center justify-center p-8">
+      {/* Backdrop */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="absolute inset-0 backdrop-blur-3xl"
+        style={{ background: palettes[currentPalette].bg }}
+        onClick={onClose}
       />
-      <div className="mb-3 text-2xl">{icon}</div>
-      <span className="text-sm font-medium">{label}</span>
-    </motion.label>
+      
+      {/* Modal Content */}
+      <motion.div
+        initial={{ scale: 0.8, opacity: 0, rotateX: 45 }}
+        animate={{ scale: 1, opacity: 1, rotateX: 0 }}
+        exit={{ scale: 0.8, opacity: 0, rotateX: -45 }}
+        className="relative rounded-5xl p-16 w-full max-w-6xl"
+        style={{
+          background: palettes[currentPalette].bg,
+          border: `6px solid ${palettes[currentPalette].primary[0]}`,
+          boxShadow: `0 0 100px ${palettes[currentPalette].primary[0]}`
+        }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-16">
+          <div className="flex items-center space-x-8">
+            <div className="p-6 rounded-4xl" style={{
+              background: `linear-gradient(135deg, ${palettes[currentPalette].primary[0]}40, ${palettes[currentPalette].primary[1]}20)`,
+              border: `3px solid ${palettes[currentPalette].primary[2]}`
+            }}>
+              <FaPaletteIcon className="text-6xl" style={{ color: palettes[currentPalette].primary[3] }} />
+            </div>
+            <div>
+              <h2 className="text-6xl font-black mb-4 tracking-tighter" style={{ 
+                color: palettes[currentPalette].primary[0],
+                textShadow: `0 0 30px ${palettes[currentPalette].primary[0]}`
+              }}>
+                DIMENSION PALETTES
+              </h2>
+              <p className="text-3xl" style={{ color: palettes[currentPalette].secondary[0] }}>
+                Choose your reality frequency
+              </p>
+            </div>
+          </div>
+          
+          <motion.button
+            whileHover={{ scale: 1.1, rotate: 90 }}
+            whileTap={{ scale: 0.9 }}
+            onClick={onClose}
+            className="p-6 rounded-3xl"
+            style={{
+              background: `linear-gradient(135deg, ${palettes[currentPalette].primary[0]}40, ${palettes[currentPalette].primary[1]}20)`,
+              border: `3px solid ${palettes[currentPalette].primary[2]}`,
+              boxShadow: `0 0 40px ${palettes[currentPalette].primary[0]}`
+            }}
+          >
+            <FaTimes className="text-4xl" style={{ color: palettes[currentPalette].primary[3] }} />
+          </motion.button>
+        </div>
+        
+        <div className="grid grid-cols-5 gap-8">
+          {Object.entries(palettes).map(([name, palette]) => (
+            <motion.button
+              key={name}
+              whileHover={{ scale: 1.05, y: -8 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => {
+                setColorPalette(name);
+                onClose();
+              }}
+              className={`relative p-8 rounded-4xl transition-all ${currentPalette === name ? 'scale-105' : ''}`}
+              style={{
+                background: `linear-gradient(135deg, ${palette.primary[0]}, ${palette.primary[1]}, ${palette.primary[2]})`,
+                border: `4px solid ${currentPalette === name ? 'white' : palette.primary[3]}`,
+                boxShadow: currentPalette === name 
+                  ? `0 0 60px ${palette.primary[0]}, 0 0 100px ${palette.primary[1]}`
+                  : `0 0 30px ${palette.primary[0]}`
+              }}
+            >
+              <div className="text-center">
+                <div className="text-4xl mb-4">
+                  {name === 'NEON_EXPLOSION' && <FaRainbowIcon />}
+                  {name === 'CYBERPUNK_DREAM' && <FaRobot />}
+                  {name === 'RAINBOW_VORTEX' && <FaMagic />}
+                  {name === 'GALACTIC_NEBULA' && <FaSpaceShuttleIcon />}
+                  {name === 'ATOMIC_FUSION' && <FaAtomIcon />}
+                </div>
+                <div className="text-xl font-black tracking-wider" style={{ color: 'white' }}>
+                  {name.split('_').join(' ')}
+                </div>
+              </div>
+            </motion.button>
+          ))}
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
+// Create Server Modal Component
+const CreateServerModal = ({ form, onChange, onSubmit, onClose, colorPalette }) => {
+  const [powerLevel, setPowerLevel] = useState(100);
+  
+  return (
+    <div className="fixed inset-0 z-[999] flex items-center justify-center p-10">
+      {/* Backdrop */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="absolute inset-0 backdrop-blur-4xl"
+        style={{ background: colorPalette.bg }}
+        onClick={onClose}
+      />
+      
+      {/* Animated Border */}
+      <div className="absolute inset-8 rounded-6xl overflow-hidden">
+        {colorPalette.primary.map((color, i) => (
+          <motion.div
+            key={i}
+            animate={{ 
+              x: [0, 100, 0],
+              background: [`linear-gradient(90deg, transparent, ${color}, transparent)`, 
+                         `linear-gradient(90deg, transparent, ${colorPalette.secondary[i]}, transparent)`]
+            }}
+            transition={{ duration: 8 + i * 2, repeat: Infinity }}
+            className="absolute h-2 w-full"
+            style={{
+              top: `${i * 20}%`,
+              filter: 'blur(20px)'
+            }}
+          />
+        ))}
+      </div>
+      
+      {/* Modal Content */}
+      <motion.div
+        initial={{ scale: 0.8, opacity: 0, rotateY: 45 }}
+        animate={{ scale: 1, opacity: 1, rotateY: 0 }}
+        exit={{ scale: 0.8, opacity: 0, rotateY: -45 }}
+        className="relative rounded-6xl p-16 w-full max-w-5xl"
+        style={{
+          background: colorPalette.bg,
+          border: `8px solid ${colorPalette.primary[0]}`,
+          boxShadow: `
+            0 0 100px ${colorPalette.primary[0]},
+            0 0 200px ${colorPalette.primary[1]},
+            inset 0 0 100px ${colorPalette.primary[2]}
+          `
+        }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between mb-20">
+          <div className="flex items-center space-x-10">
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+              className="p-10 rounded-4xl"
+              style={{
+                background: `linear-gradient(135deg, ${colorPalette.primary[0]}40, ${colorPalette.primary[1]}20)`,
+                border: `4px solid ${colorPalette.primary[2]}`,
+                boxShadow: `0 0 60px ${colorPalette.primary[0]}`
+              }}
+            >
+              <FaRocket className="text-7xl" style={{ color: colorPalette.primary[3] }} />
+            </motion.div>
+            
+            <div>
+              <h2 className="text-7xl font-black mb-6 tracking-tighter" style={{
+                background: `linear-gradient(135deg, ${colorPalette.primary[0]}, ${colorPalette.primary[1]}, ${colorPalette.primary[2]})`,
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                textShadow: `0 0 40px ${colorPalette.primary[0]}`
+              }}>
+                ACTIVATE SERVER
+              </h2>
+              <p className="text-3xl flex items-center space-x-6" style={{ color: colorPalette.secondary[0] }}>
+                <FaSatellite className="animate-spin" style={{ animationDuration: '6s' }} />
+                <span>Configure your quantum server instance</span>
+              </p>
+            </div>
+          </div>
+          
+          <motion.button
+            whileHover={{ scale: 1.1, rotate: 90 }}
+            whileTap={{ scale: 0.9 }}
+            onClick={onClose}
+            className="p-6 rounded-3xl"
+            style={{
+              background: `linear-gradient(135deg, ${colorPalette.primary[0]}40, ${colorPalette.primary[1]}20)`,
+              border: `3px solid ${colorPalette.primary[2]}`,
+              boxShadow: `0 0 40px ${colorPalette.primary[0]}`
+            }}
+          >
+            <FaTimes className="text-4xl" style={{ color: colorPalette.primary[3] }} />
+          </motion.button>
+        </div>
+        
+        {/* Form */}
+        <div className="space-y-12">
+          <div>
+            <label className="block text-3xl font-black mb-8 flex items-center space-x-6">
+              <FaServer className="text-4xl" style={{ color: colorPalette.primary[0] }} />
+              <span style={{ color: colorPalette.primary[0] }}>SERVER NAME</span>
+            </label>
+            <input
+              type="text"
+              value={form.name}
+              onChange={(e) => onChange({...form, name: e.target.value})}
+              className="w-full rounded-4xl px-10 py-8 text-3xl focus:outline-none transition-all"
+              placeholder="Enter quantum server designation..."
+              style={{
+                background: `linear-gradient(135deg, ${colorPalette.primary[0]}20, ${colorPalette.primary[1]}10)`,
+                border: `4px solid ${colorPalette.primary[2]}`,
+                color: colorPalette.secondary[0],
+                boxShadow: `0 0 40px ${colorPalette.primary[0]}`,
+                fontSize: '2rem'
+              }}
+            />
+          </div>
+          
+          <div>
+            <label className="block text-3xl font-black mb-8 flex items-center space-x-6">
+              <FaTerminal className="text-4xl" style={{ color: colorPalette.primary[1] }} />
+              <span style={{ color: colorPalette.primary[1] }}>DESCRIPTION</span>
+            </label>
+            <textarea
+              value={form.description}
+              onChange={(e) => onChange({...form, description: e.target.value})}
+              className="w-full rounded-4xl px-10 py-8 text-3xl focus:outline-none resize-none"
+              placeholder="Describe your server's quantum purpose..."
+              rows={4}
+              style={{
+                background: `linear-gradient(135deg, ${colorPalette.primary[1]}20, ${colorPalette.primary[2]}10)`,
+                border: `4px solid ${colorPalette.primary[3]}`,
+                color: colorPalette.secondary[1],
+                boxShadow: `0 0 40px ${colorPalette.primary[1]}`,
+                fontSize: '2rem'
+              }}
+            />
+          </div>
+          
+          <div>
+            <label className="block text-3xl font-black mb-8 flex items-center space-x-6">
+              <FaBolt className="text-4xl animate-pulse" style={{ color: colorPalette.primary[2] }} />
+              <span style={{ color: colorPalette.primary[2] }}>POWER LEVEL</span>
+              <span className="ml-auto text-4xl font-black" style={{ color: colorPalette.accent[0] }}>
+                {powerLevel}%
+              </span>
+            </label>
+            <div className="relative">
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={powerLevel}
+                onChange={(e) => {
+                  const value = parseInt(e.target.value);
+                  setPowerLevel(value);
+                  onChange({...form, powerLevel: value});
+                }}
+                className="w-full h-6 rounded-full appearance-none"
+                style={{
+                  background: `linear-gradient(90deg, ${colorPalette.primary[0]}, ${colorPalette.primary[1]}, ${colorPalette.primary[2]})`,
+                  boxShadow: `0 0 30px ${colorPalette.primary[0]}`,
+                  WebkitAppearance: 'none'
+                }}
+              />
+              <div className="flex justify-between text-2xl font-black mt-6" style={{ color: colorPalette.secondary[2] }}>
+                <span>ECONOMY</span>
+                <span>BALANCED</span>
+                <span>PERFORMANCE</span>
+                <span>EXTREME</span>
+              </div>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-2 gap-12">
+            <div>
+              <label className="block text-3xl font-black mb-8 flex items-center space-x-6">
+                <FaGlobe className="text-4xl" style={{ color: colorPalette.primary[3] }} />
+                <span style={{ color: colorPalette.primary[3] }}>VISIBILITY</span>
+              </label>
+              <select
+                value={form.privacy}
+                onChange={(e) => onChange({...form, privacy: e.target.value})}
+                className="w-full rounded-4xl px-10 py-8 text-3xl focus:outline-none appearance-none"
+                style={{
+                  background: `linear-gradient(135deg, ${colorPalette.primary[3]}20, ${colorPalette.primary[4]}10)`,
+                  border: `4px solid ${colorPalette.primary[5]}`,
+                  color: colorPalette.secondary[3],
+                  boxShadow: `0 0 40px ${colorPalette.primary[3]}`,
+                  fontSize: '2rem'
+                }}
+              >
+                <option value="public" style={{ background: colorPalette.bg, color: colorPalette.primary[0] }}>🌐 PUBLIC</option>
+                <option value="private" style={{ background: colorPalette.bg, color: colorPalette.primary[1] }}>🔒 PRIVATE</option>
+              </select>
+            </div>
+            
+            <div>
+              <label className="block text-3xl font-black mb-8 flex items-center space-x-6">
+                <FaCube className="text-4xl" style={{ color: colorPalette.primary[4] }} />
+                <span style={{ color: colorPalette.primary[4] }}>SERVER TYPE</span>
+              </label>
+              <select
+                value={form.serverType}
+                onChange={(e) => onChange({...form, serverType: e.target.value})}
+                className="w-full rounded-4xl px-10 py-8 text-3xl focus:outline-none appearance-none"
+                style={{
+                  background: `linear-gradient(135deg, ${colorPalette.primary[4]}20, ${colorPalette.primary[5]}10)`,
+                  border: `4px solid ${colorPalette.primary[6]}`,
+                  color: colorPalette.secondary[4],
+                  boxShadow: `0 0 40px ${colorPalette.primary[4]}`,
+                  fontSize: '2rem'
+                }}
+              >
+                <option value="quantum" style={{ background: colorPalette.bg, color: colorPalette.primary[0] }}>🌀 QUANTUM</option>
+                <option value="cyber" style={{ background: colorPalette.bg, color: colorPalette.primary[1] }}>🤖 CYBER</option>
+                <option value="neural" style={{ background: colorPalette.bg, color: colorPalette.primary[2] }}>🧠 NEURAL</option>
+                <option value="fusion" style={{ background: colorPalette.bg, color: colorPalette.primary[3] }}>⚛️ FUSION</option>
+              </select>
+            </div>
+          </div>
+          
+          <div className="flex items-center space-x-8 p-12 rounded-4xl" style={{
+            background: `linear-gradient(135deg, ${colorPalette.primary[0]}20, ${colorPalette.primary[1]}10)`,
+            border: `4px solid ${colorPalette.primary[2]}`,
+            boxShadow: `0 0 40px ${colorPalette.primary[0]}`
+          }}>
+            <input
+              type="checkbox"
+              id="generateToken"
+              checked={form.generateToken}
+              onChange={(e) => onChange({...form, generateToken: e.target.checked})}
+              className="w-10 h-10 rounded-xl cursor-pointer"
+              style={{
+                background: form.generateToken 
+                  ? `linear-gradient(135deg, ${colorPalette.primary[0]}, ${colorPalette.primary[1]})`
+                  : `linear-gradient(135deg, ${colorPalette.primary[2]}20, ${colorPalette.primary[3]}10)`,
+                border: `3px solid ${colorPalette.primary[4]}`,
+                boxShadow: `0 0 20px ${colorPalette.primary[0]}`
+              }}
+            />
+            <label htmlFor="generateToken" className="flex-1 cursor-pointer">
+              <div className="text-3xl font-black mb-3" style={{ color: colorPalette.primary[0] }}>
+                GENERATE QUANTUM TOKEN
+              </div>
+              <div className="text-2xl" style={{ color: colorPalette.secondary[0] }}>
+                Create access token for immediate API integration
+              </div>
+            </label>
+            <FaKey className="text-5xl animate-pulse" style={{ color: colorPalette.primary[1] }} />
+          </div>
+        </div>
+        
+        {/* Actions */}
+        <div className="flex space-x-12 mt-24">
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={onClose}
+            className="flex-1 px-12 py-10 rounded-5xl text-3xl font-black flex items-center justify-center space-x-6 group"
+            style={{
+              background: `linear-gradient(135deg, ${colorPalette.primary[5]}40, ${colorPalette.primary[6]}20)`,
+              border: `4px solid ${colorPalette.primary[7]}`,
+              boxShadow: `0 0 50px ${colorPalette.primary[5]}`,
+              color: colorPalette.primary[5]
+            }}
+          >
+            <FaTimes className="text-4xl group-hover:rotate-90 transition-transform" />
+            <span>CANCEL</span>
+          </motion.button>
+          
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={onSubmit}
+            className="flex-1 px-12 py-10 rounded-5xl text-3xl font-black flex items-center justify-center space-x-6 group relative overflow-hidden"
+            style={{
+              background: `linear-gradient(135deg, ${colorPalette.primary[0]}, ${colorPalette.primary[1]}, ${colorPalette.primary[2]})`,
+              border: `4px solid ${colorPalette.primary[3]}`,
+              boxShadow: `0 0 80px ${colorPalette.primary[0]}`,
+              color: 'white'
+            }}
+          >
+            <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/40 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
+            <FaRocket className="text-5xl group-hover:animate-bounce" />
+            <span>ACTIVATE SERVER</span>
+            <FaSparkles className="text-5xl animate-pulse" />
+          </motion.button>
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
+// Token Card Component (similar pattern as ServerCard)
+const TokenCard = ({ token, index, colorPalette }) => {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 60 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.1, type: "spring" }}
+    >
+      <div className="relative rounded-5xl p-12" style={{
+        background: `linear-gradient(135deg, ${colorPalette.secondary[0]}30, ${colorPalette.secondary[1]}20, ${colorPalette.secondary[2]}10)`,
+        border: `6px solid ${colorPalette.secondary[3]}`,
+        boxShadow: `
+          0 0 80px ${colorPalette.secondary[0]},
+          0 0 160px ${colorPalette.secondary[1]},
+          inset 0 0 80px ${colorPalette.secondary[2]}
+        `
+      }}>
+        {/* Token content here */}
+      </div>
+    </motion.div>
   );
 };
 
