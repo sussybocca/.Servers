@@ -72,1014 +72,7 @@ const PSYCHEDELIC_PALETTES = {
   }
 };
 
-const ServerProfileManager = () => {
-  // State
-  const [servers, setServers] = useState([]);
-  const [tokens, setTokens] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('servers');
-  const [message, setMessage] = useState({ type: '', text: '' });
-  const [colorPalette, setColorPalette] = useState('NEON_EXPLOSION');
-  const [visualIntensity, setVisualIntensity] = useState(100);
-  const [audioEnabled, setAudioEnabled] = useState(false);
-  
-  // Modals
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showTokenModal, setShowTokenModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [showPaletteModal, setShowPaletteModal] = useState(false);
-  
-  // Forms
-  const [serverForm, setServerForm] = useState({
-    name: '',
-    description: '',
-    privacy: 'public',
-    generateToken: false,
-    serverType: 'quantum',
-    powerLevel: 100
-  });
-  
-  const [tokenForm, setTokenForm] = useState({
-    table_name: 'servers',
-    record_id: '',
-    permissions: { read: true, write: true, delete: false, admin: false },
-    expires_in_hours: 72,
-    tokenType: 'quantum'
-  });
-  
-  const [editForm, setEditForm] = useState({
-    serverId: '',
-    name: '',
-    description: '',
-    privacy: 'public',
-    serverType: 'quantum'
-  });
-
-  // Refs
-  const canvasRef = useRef(null);
-  const threeRef = useRef(null);
-  const rafRef = useRef(null);
-  const frameInterval = 1000 / 30;
-
-  const currentPalette = PSYCHEDELIC_PALETTES[colorPalette];
-
-  // Initialize Three.js Psychedelic Background
-  useEffect(() => {
-    if (!canvasRef.current) return;
-
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 5000);
-    const renderer = new THREE.WebGLRenderer({ 
-      canvas: canvasRef.current,
-      alpha: true,
-      antialias: true,
-      powerPreference: "high-performance"
-    });
-    
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    
-    // Create psychedelic particle system
-    const particleCount = 5000;
-    const positions = new Float32Array(particleCount * 3);
-    const colors = new Float32Array(particleCount * 3);
-    const sizes = new Float32Array(particleCount);
-    
-    for (let i = 0; i < particleCount; i++) {
-      const i3 = i * 3;
-      const radius = 2000;
-      const theta = Math.random() * Math.PI * 2;
-      const phi = Math.random() * Math.PI;
-      
-      positions[i3] = radius * Math.sin(phi) * Math.cos(theta) * (Math.random() * 0.5 + 0.5);
-      positions[i3 + 1] = radius * Math.cos(phi) * (Math.random() * 0.5 + 0.5);
-      positions[i3 + 2] = radius * Math.sin(phi) * Math.sin(theta) * (Math.random() * 0.5 + 0.5);
-      
-      const color = currentPalette.primary[Math.floor(Math.random() * currentPalette.primary.length)];
-      const hex = parseInt(color.replace('#', ''), 16);
-      colors[i3] = ((hex >> 16) & 255) / 255;
-      colors[i3 + 1] = ((hex >> 8) & 255) / 255;
-      colors[i3 + 2] = (hex & 255) / 255;
-      
-      sizes[i] = Math.random() * 5 + 1;
-    }
-    
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-    geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
-    
-    const material = new THREE.PointsMaterial({
-      size: 3,
-      vertexColors: true,
-      transparent: true,
-      opacity: 0.8,
-      sizeAttenuation: true,
-      blending: THREE.AdditiveBlending
-    });
-    
-    const particles = new THREE.Points(geometry, material);
-    scene.add(particles);
-    
-    // Create psychedelic orbs
-    const orbs = currentPalette.primary.map((color, i) => {
-      const geometry = new THREE.SphereGeometry(50 + i * 20, 64, 64);
-      const material = new THREE.MeshBasicMaterial({
-        color: new THREE.Color(color),
-        transparent: true,
-        opacity: 0.2,
-        wireframe: true
-      });
-      
-      const orb = new THREE.Mesh(geometry, material);
-      orb.position.set(
-        (Math.random() - 0.5) * 1500,
-        (Math.random() - 0.5) * 1500,
-        (Math.random() - 0.5) * 1500
-      );
-      scene.add(orb);
-      return orb;
-    });
-    
-    // Create connection lines
-    const lineGeometry = new THREE.BufferGeometry();
-    const lineMaterial = new THREE.LineBasicMaterial({
-      vertexColors: true,
-      transparent: true,
-      opacity: 0.3
-    });
-    
-    const lines = new THREE.LineSegments(lineGeometry, lineMaterial);
-    scene.add(lines);
-    
-    camera.position.z = 1000;
-    
-    // Animation loop
-    let time = 0;
-    let lastTime = 0;
-    const animate = (currentTime) => {
-      rafRef.current = requestAnimationFrame(animate);
-      
-      const delta = currentTime - lastTime;
-      if (delta < frameInterval) return;
-      lastTime = currentTime;
-      
-      time += 0.01;
-      
-      // Animate particles
-      particles.rotation.x = time * 0.1;
-      particles.rotation.y = time * 0.15;
-      
-      // Animate orbs
-      orbs.forEach((orb, i) => {
-        orb.rotation.x = time * (0.02 + i * 0.005);
-        orb.rotation.y = time * (0.03 + i * 0.005);
-        orb.position.x = Math.sin(time * 0.5 + i) * 300;
-        orb.position.y = Math.cos(time * 0.3 + i) * 300;
-      });
-      
-      // Animate connection lines
-      const linePositions = [];
-      const lineColors = [];
-      
-      for (let i = 0; i < 100; i++) {
-        const x1 = (Math.random() - 0.5) * 2000;
-        const y1 = (Math.random() - 0.5) * 2000;
-        const z1 = (Math.random() - 0.5) * 2000;
-        const x2 = x1 + (Math.random() - 0.5) * 400;
-        const y2 = y1 + (Math.random() - 0.5) * 400;
-        const z2 = z1 + (Math.random() - 0.5) * 400;
-        
-        linePositions.push(x1, y1, z1, x2, y2, z2);
-        
-        const color = currentPalette.accent[Math.floor(Math.random() * currentPalette.accent.length)];
-        const hex = parseInt(color.replace('#', ''), 16);
-        const r = ((hex >> 16) & 255) / 255;
-        const g = ((hex >> 8) & 255) / 255;
-        const b = (hex & 255) / 255;
-        
-        lineColors.push(r, g, b, r, g, b);
-      }
-      
-      lineGeometry.setAttribute('position', new THREE.Float32BufferAttribute(linePositions, 3));
-      lineGeometry.setAttribute('color', new THREE.Float32BufferAttribute(lineColors, 3));
-      
-      renderer.render(scene, camera);
-    };
-    
-    animate();
-    
-    const handleResize = () => {
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
-    };
-    
-    window.addEventListener('resize', handleResize);
-    
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      renderer.dispose();
-    };
-  }, [colorPalette]);
-
-  // Fetch data
-  useEffect(() => {
-    const loadData = async () => {
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      fetchServers();
-      fetchTokens();
-    };
-    loadData();
-  }, []);
-
-  const fetchServers = async () => {
-    try {
-      const response = await fetch('/api/create-server', { credentials: 'include' });
-      const result = await response.json();
-      if (result.success) setServers(Array.isArray(result.servers) ? result.servers : []);
-    } catch (error) {
-      showMessage('error', 'Connection Error');
-    }
-  };
-
-  const fetchTokens = async () => {
-    try {
-      const response = await fetch('/api/create-server?getTokens=true', { credentials: 'include' });
-      const result = await response.json();
-      if (result.success) setTokens(Array.isArray(result.tokens) ? result.tokens : []);
-    } catch (error) {
-      showMessage('error', 'Connection Error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const createServer = async () => {
-    try {
-      const response = await fetch('/api/create-server', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(serverForm)
-      });
-      const result = await response.json();
-      if (result.success) {
-        showMessage('success', '🚀 QUANTUM SERVER ACTIVATED!');
-        setShowCreateModal(false);
-        setServerForm({ name: '', description: '', privacy: 'public', generateToken: false, serverType: 'quantum', powerLevel: 100 });
-        fetchServers();
-        if (result.token) showMessage('success', '🔑 NEURAL TOKEN GENERATED!');
-      }
-    } catch (error) {
-      showMessage('error', 'Quantum Flux Error');
-    }
-  };
-
-  const updateServer = async () => {
-    try {
-      const response = await fetch('/api/create-server', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(editForm)
-      });
-      const result = await response.json();
-      if (result.success) {
-        showMessage('success', '⚡ SERVER RESYNCHRONIZED!');
-        setShowEditModal(false);
-        fetchServers();
-      }
-    } catch (error) {
-      showMessage('error', 'Sync Failure');
-    }
-  };
-
-  const deleteServer = async (serverId) => {
-    const confirmed = await immersiveConfirm('QUANTUM DECOMPILATION', 'Initiate server de-rez protocol?');
-    if (!confirmed) return;
-    try {
-      const response = await fetch('/api/create-server', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ serverId })
-      });
-      const result = await response.json();
-      if (result.success) {
-        showMessage('success', '💥 SERVER DISINTEGRATED');
-        fetchServers();
-      }
-    } catch (error) {
-      showMessage('error', 'Decomp Failed');
-    }
-  };
-
-  const showMessage = (type, text) => {
-    setMessage({ type, text });
-    setTimeout(() => setMessage({ type: '', text: '' }), 3000);
-  };
-
-  const immersiveConfirm = async (title, message) => {
-    return new Promise((resolve) => {
-      const modal = document.createElement('div');
-      modal.className = 'fixed inset-0 z-[9999] flex items-center justify-center';
-      modal.innerHTML = `
-        <div class="absolute inset-0" style="background: ${currentPalette.bg}"></div>
-        <div class="relative z-10 p-12 rounded-4xl max-w-md w-full mx-4" style="
-          background: ${currentPalette.bg};
-          border: 4px solid ${currentPalette.primary[0]};
-          box-shadow: 0 0 100px ${currentPalette.primary[0]};
-        ">
-          <div class="text-center mb-8">
-            <div class="w-32 h-32 mx-auto mb-6 rounded-full flex items-center justify-center animate-pulse" style="
-              border: 4px solid ${currentPalette.primary[1]};
-              box-shadow: 0 0 60px ${currentPalette.primary[1]};
-              background: ${currentPalette.bg};
-            ">
-              <div class="text-6xl" style="color: ${currentPalette.primary[2]}">💣</div>
-            </div>
-            <h3 class="text-4xl font-black mb-4" style="color: ${currentPalette.primary[0]}">${title}</h3>
-            <p class="text-2xl" style="color: ${currentPalette.secondary[0]}">${message}</p>
-          </div>
-          <div class="grid grid-cols-2 gap-6">
-            <button id="confirm-cancel" class="px-8 py-4 rounded-2xl text-2xl font-black transition-all duration-300 hover:scale-105" style="
-              background: ${currentPalette.bg};
-              border: 3px solid ${currentPalette.primary[3]};
-              color: ${currentPalette.primary[3]};
-              box-shadow: 0 0 30px ${currentPalette.primary[3]};
-            ">
-              ABORT
-            </button>
-            <button id="confirm-ok" class="px-8 py-4 rounded-2xl text-2xl font-black transition-all duration-300 hover:scale-105" style="
-              background: linear-gradient(135deg, ${currentPalette.primary[0]}, ${currentPalette.primary[1]});
-              color: white;
-              box-shadow: 0 0 50px ${currentPalette.primary[0]};
-            ">
-              CONFIRM
-            </button>
-          </div>
-        </div>
-      `;
-      document.body.appendChild(modal);
-      document.getElementById('confirm-cancel').onclick = () => { modal.remove(); resolve(false); };
-      document.getElementById('confirm-ok').onclick = () => { modal.remove(); resolve(true); };
-    });
-  };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen relative overflow-hidden" style={{ background: currentPalette.bg }}>
-        <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
-        
-        <div className="relative z-10 flex flex-col items-center justify-center min-h-screen">
-          <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ type: "spring", damping: 15 }}
-            className="relative mb-16"
-          >
-            {currentPalette.primary.map((color, i) => (
-              <motion.div
-                key={i}
-                animate={{ 
-                  rotate: 360,
-                  scale: [1, 1.2, 1]
-                }}
-                transition={{ 
-                  duration: 8 + i * 2,
-                  repeat: Infinity,
-                  ease: "linear"
-                }}
-                className="absolute -inset-12 rounded-full"
-                style={{
-                  border: `4px solid ${color}`,
-                  filter: `blur(${4 + i}px)`,
-                  opacity: 0.2
-                }}
-              />
-            ))}
-            
-            <div className="relative w-80 h-80 rounded-full flex items-center justify-center" style={{
-              background: `radial-gradient(circle, ${currentPalette.primary[0]}30, transparent 70%)`,
-              border: `6px solid ${currentPalette.primary[1]}`,
-              boxShadow: `0 0 100px ${currentPalette.primary[1]}, inset 0 0 100px ${currentPalette.primary[2]}`
-            }}>
-              <motion.div
-                animate={{ rotate: 360 }}
-                transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
-                className="absolute inset-8 rounded-full border-4"
-                style={{ borderColor: currentPalette.primary[3] }}
-              />
-              <FaServer className="text-9xl" style={{ color: currentPalette.primary[4] }} />
-            </div>
-          </motion.div>
-
-          <motion.div
-            initial={{ y: 40, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 0.5 }}
-            className="text-center"
-          >
-            <h1 className="text-8xl font-black mb-10 tracking-tighter">
-              {currentPalette.primary.map((color, i) => (
-                <motion.span
-                  key={i}
-                  animate={{ y: [0, -10, 0] }}
-                  transition={{ duration: 2, delay: i * 0.2, repeat: Infinity }}
-                  className="inline-block"
-                  style={{ color, textShadow: `0 0 30px ${color}` }}
-                >
-                  HYPERDOCK
-                </motion.span>
-              ))}
-            </h1>
-            
-            <div className="relative w-[800px] h-4 rounded-full overflow-hidden mx-auto mb-14" style={{
-              background: `linear-gradient(90deg, ${currentPalette.primary.join(', ')})`,
-              opacity: 0.6
-            }}>
-              <motion.div
-                initial={{ x: "-100%" }}
-                animate={{ x: "100%" }}
-                transition={{ duration: 2, repeat: Infinity }}
-                className="absolute inset-y-0 w-1/3"
-                style={{
-                  background: `linear-gradient(90deg, transparent, white, transparent)`,
-                  filter: 'blur(10px)'
-                }}
-              />
-            </div>
-            
-            <div className="space-y-6">
-              {['INITIALIZING QUANTUM CORE', 'CALIBRATING NEURAL MATRIX', 'SYNCING CYBERSPACE', 'BOOTING HYPERDRIVE'].map((text, i) => (
-                <motion.div
-                  key={i}
-                  initial={{ x: -200, opacity: 0 }}
-                  animate={{ x: 0, opacity: 1 }}
-                  transition={{ delay: 1 + i * 0.3 }}
-                  className="text-3xl font-bold flex items-center justify-center space-x-4"
-                  style={{ color: currentPalette.secondary[i % currentPalette.secondary.length] }}
-                >
-                  <div className="w-4 h-4 rounded-full animate-pulse" style={{
-                    background: currentPalette.accent[i % currentPalette.accent.length],
-                    boxShadow: `0 0 20px ${currentPalette.accent[i % currentPalette.accent.length]}`
-                  }} />
-                  <span style={{ textShadow: `0 0 20px ${currentPalette.secondary[i % currentPalette.secondary.length]}` }}>
-                    {text}
-                  </span>
-                  <div className="w-4 h-4 rounded-full animate-pulse" style={{
-                    background: currentPalette.accent[i % currentPalette.accent.length],
-                    boxShadow: `0 0 20px ${currentPalette.accent[i % currentPalette.accent.length]}`
-                  }} />
-                </motion.div>
-              ))}
-            </div>
-          </motion.div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen relative overflow-hidden" style={{ background: currentPalette.bg }}>
-      {/* Three.js Psychedelic Background */}
-      <canvas ref={canvasRef} className="fixed inset-0 w-full h-full" />
-      
-      {/* Pulsing Border */}
-      <div className="fixed inset-0 pointer-events-none">
-        {currentPalette.primary.map((color, i) => (
-          <motion.div
-            key={i}
-            animate={{ 
-              scale: [1, 1.02, 1],
-              opacity: [0.1, 0.3, 0.1]
-            }}
-            transition={{ 
-              duration: 3 + i,
-              repeat: Infinity,
-              ease: "easeInOut"
-            }}
-            className="absolute inset-0 border-[20px] rounded-[100px]"
-            style={{ 
-              borderColor: color,
-              filter: 'blur(20px)'
-            }}
-          />
-        ))}
-      </div>
-      
-      {/* Floating Particles Effect */}
-      <div className="fixed inset-0 pointer-events-none">
-        {Array.from({ length: 50 }).map((_, i) => (
-          <motion.div
-            key={i}
-            animate={{
-              x: [Math.random() * window.innerWidth, Math.random() * window.innerWidth],
-              y: [Math.random() * window.innerHeight, Math.random() * window.innerHeight],
-              rotate: 360
-            }}
-            transition={{
-              duration: 10 + Math.random() * 20,
-              repeat: Infinity,
-              ease: "linear"
-            }}
-            className="absolute w-4 h-4 rounded-full"
-            style={{
-              background: currentPalette.primary[i % currentPalette.primary.length],
-              boxShadow: `0 0 30px ${currentPalette.primary[i % currentPalette.primary.length]}`,
-              filter: 'blur(2px)'
-            }}
-          />
-        ))}
-      </div>
-      
-      {/* Palette Selector */}
-      <div className="fixed top-6 right-6 z-50">
-        <ParallaxTilt
-          tiltMaxAngleX={15}
-          tiltMaxAngleY={15}
-          scale={1.1}
-          glareEnable={true}
-          glareMaxOpacity={0.8}
-          className="relative"
-        >
-          <motion.button
-            whileHover={{ scale: 1.1, rotate: 360 }}
-            whileTap={{ scale: 0.9 }}
-            onClick={() => setShowPaletteModal(!showPaletteModal)}
-            className="p-4 rounded-3xl shadow-2xl flex items-center justify-center"
-            style={{
-              background: `linear-gradient(135deg, ${currentPalette.primary[0]}, ${currentPalette.primary[1]})`,
-              border: `3px solid ${currentPalette.primary[2]}`,
-              boxShadow: `0 0 50px ${currentPalette.primary[0]}`
-            }}
-          >
-            <FaPaletteIcon className="text-3xl" style={{ color: 'white' }} />
-          </motion.button>
-        </ParallaxTilt>
-      </div>
-      
-      {/* Main Header */}
-      <motion.header
-        initial={{ y: -100, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ type: "spring", stiffness: 100, damping: 20 }}
-        className="relative z-10"
-      >
-        <div className="max-w-8xl mx-auto px-10 py-16">
-          <div className="flex items-center justify-between mb-20">
-            <div className="flex items-center space-x-10">
-              <motion.div
-                whileHover={{ scale: 1.1, rotate: 360 }}
-                transition={{ duration: 0.8 }}
-                className="relative"
-              >
-                {currentPalette.primary.map((color, i) => (
-                  <motion.div
-                    key={i}
-                    animate={{ 
-                      rotate: 360,
-                      scale: [1, 1.1, 1]
-                    }}
-                    transition={{ 
-                      duration: 15 + i * 3,
-                      repeat: Infinity,
-                      ease: "linear"
-                    }}
-                    className="absolute -inset-10 rounded-full"
-                    style={{
-                      border: `6px solid ${color}`,
-                      filter: 'blur(8px)',
-                      opacity: 0.3
-                    }}
-                  />
-                ))}
-                
-                <div className="relative p-12 rounded-5xl shadow-2xl" style={{
-                  background: `linear-gradient(135deg, ${currentPalette.primary[0]}30, ${currentPalette.primary[1]}20, ${currentPalette.primary[2]}10)`,
-                  border: `6px solid ${currentPalette.primary[3]}`,
-                  boxShadow: `0 0 100px ${currentPalette.primary[3]}, inset 0 0 100px ${currentPalette.primary[4]}`
-                }}>
-                  <motion.div
-                    animate={{ rotate: 360 }}
-                    transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
-                    className="absolute inset-4 rounded-full border-4"
-                    style={{ borderColor: currentPalette.primary[5] }}
-                  />
-                  <FaServer className="text-8xl" style={{ color: currentPalette.primary[6] }} />
-                </div>
-              </motion.div>
-              
-              <div>
-                <motion.h1 
-                  initial={{ opacity: 0, y: 30 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="text-9xl font-black mb-8 tracking-tighter"
-                >
-                  <span className="bg-gradient-to-r from-transparent via-transparent to-transparent bg-clip-text">
-                    {currentPalette.primary.map((color, i) => (
-                      <motion.span
-                        key={i}
-                        animate={{ 
-                          y: [0, -15, 0],
-                          textShadow: [
-                            `0 0 10px ${color}`,
-                            `0 0 40px ${color}`,
-                            `0 0 10px ${color}`
-                          ]
-                        }}
-                        transition={{ 
-                          duration: 2,
-                          delay: i * 0.1,
-                          repeat: Infinity 
-                        }}
-                        className="inline-block mr-2"
-                        style={{ color }}
-                      >
-                        HYPERDOCK
-                      </motion.span>
-                    ))}
-                  </span>
-                </motion.h1>
-                <motion.p 
-                  initial={{ opacity: 0, y: 30 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.2 }}
-                  className="text-4xl flex items-center space-x-6"
-                  style={{ color: currentPalette.secondary[0] }}
-                >
-                  <FaSatellite className="text-5xl animate-spin" style={{ animationDuration: '5s' }} />
-                  <span className="font-black tracking-widest">QUANTUM SERVER MANAGEMENT INTERFACE</span>
-                  <FaSparkles className="text-5xl animate-bounce" style={{ color: currentPalette.accent[0] }} />
-                </motion.p>
-              </div>
-            </div>
-            
-            <div className="flex space-x-8">
-              <ParallaxTilt
-                tiltMaxAngleX={20}
-                tiltMaxAngleY={20}
-                scale={1.15}
-                glareEnable={true}
-                glareMaxOpacity={0.9}
-                glareColor={currentPalette.primary[0]}
-                className="relative"
-              >
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => setShowCreateModal(true)}
-                  className="relative group"
-                >
-                  <motion.div
-                    animate={{ 
-                      scale: [1, 1.05, 1],
-                      boxShadow: [
-                        `0 0 60px ${currentPalette.primary[0]}`,
-                        `0 0 100px ${currentPalette.primary[1]}`,
-                        `0 0 60px ${currentPalette.primary[0]}`
-                      ]
-                    }}
-                    transition={{ duration: 2, repeat: Infinity }}
-                    className="absolute inset-0 rounded-5xl blur-2xl opacity-80"
-                    style={{ background: `linear-gradient(135deg, ${currentPalette.primary[0]}, ${currentPalette.primary[1]})` }}
-                  />
-                  <div className="relative px-20 py-8 rounded-5xl font-black text-3xl flex items-center space-x-8 overflow-hidden" style={{
-                    background: `linear-gradient(135deg, ${currentPalette.primary[0]}, ${currentPalette.primary[1]}, ${currentPalette.primary[2]})`,
-                    border: `4px solid ${currentPalette.primary[3]}`,
-                    boxShadow: `0 0 80px ${currentPalette.primary[0]}`
-                  }}>
-                    <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/30 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
-                    <FaRocket className="text-5xl animate-bounce" />
-                    <span className="tracking-widest">ACTIVATE SERVER</span>
-                    <FaBolt className="text-5xl animate-pulse" />
-                  </div>
-                </motion.button>
-              </ParallaxTilt>
-              
-              <ParallaxTilt
-                tiltMaxAngleX={20}
-                tiltMaxAngleY={20}
-                scale={1.15}
-                glareEnable={true}
-                glareMaxOpacity={0.9}
-                glareColor={currentPalette.secondary[0]}
-                className="relative"
-              >
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => setShowTokenModal(true)}
-                  className="relative group"
-                >
-                  <motion.div
-                    animate={{ 
-                      scale: [1, 1.05, 1],
-                      boxShadow: [
-                        `0 0 60px ${currentPalette.secondary[0]}`,
-                        `0 0 100px ${currentPalette.secondary[1]}`,
-                        `0 0 60px ${currentPalette.secondary[0]}`
-                      ]
-                    }}
-                    transition={{ duration: 2, repeat: Infinity }}
-                    className="absolute inset-0 rounded-5xl blur-2xl opacity-80"
-                    style={{ background: `linear-gradient(135deg, ${currentPalette.secondary[0]}, ${currentPalette.secondary[1]})` }}
-                  />
-                  <div className="relative px-20 py-8 rounded-5xl font-black text-3xl flex items-center space-x-8 overflow-hidden" style={{
-                    background: `linear-gradient(135deg, ${currentPalette.secondary[0]}, ${currentPalette.secondary[1]}, ${currentPalette.secondary[2]})`,
-                    border: `4px solid ${currentPalette.secondary[3]}`,
-                    boxShadow: `0 0 80px ${currentPalette.secondary[0]}`
-                  }}>
-                    <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/30 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
-                    <SiJsonwebtokens className="text-5xl animate-spin" style={{ animationDuration: '3s' }} />
-                    <span className="tracking-widest">GENERATE TOKEN</span>
-                    <FaKey className="text-5xl animate-pulse" />
-                  </div>
-                </motion.button>
-              </ParallaxTilt>
-            </div>
-          </div>
-          
-          {/* Tabs */}
-          <div className="relative">
-            <div className="absolute inset-0 rounded-5xl backdrop-blur-2xl" style={{
-              background: `linear-gradient(135deg, ${currentPalette.primary.map(c => c + '20').join(', ')})`,
-              border: `3px solid ${currentPalette.primary[0]}`,
-              boxShadow: `0 0 60px ${currentPalette.primary[0]}`
-            }} />
-            
-            <div className="relative z-10 p-3">
-              <div className="flex space-x-4">
-                {[
-                  { id: 'servers', label: 'QUANTUM SERVERS', icon: FaServer, count: servers.length, color: currentPalette.primary[0] },
-                  { id: 'tokens', label: 'NEURAL TOKENS', icon: SiJsonwebtokens, count: tokens.length, color: currentPalette.primary[1] },
-                  { id: 'network', label: 'CYBER NETWORK', icon: FaNetworkWired, color: currentPalette.primary[2] },
-                  { id: 'analytics', label: 'QUANTUM ANALYTICS', icon: FaChartLine, color: currentPalette.primary[3] },
-                  { id: 'settings', label: 'DIMENSION SETTINGS', icon: FaCog, color: currentPalette.primary[4] }
-                ].map((tab) => (
-                  <motion.button
-                    key={tab.id}
-                    whileHover={{ scale: 1.05, y: -4 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => setActiveTab(tab.id)}
-                    className={`relative flex-1 py-10 px-8 rounded-4xl transition-all duration-300 flex items-center justify-center space-x-6 group ${
-                      activeTab === tab.id ? 'scale-105' : ''
-                    }`}
-                    style={{
-                      background: activeTab === tab.id 
-                        ? `linear-gradient(135deg, ${tab.color}40, ${currentPalette.secondary[0]}20, transparent)`
-                        : `linear-gradient(135deg, ${tab.color}20, transparent)`,
-                      border: `3px solid ${activeTab === tab.id ? tab.color : tab.color + '60'}`,
-                      boxShadow: activeTab === tab.id 
-                        ? `0 0 40px ${tab.color}, inset 0 0 40px ${currentPalette.accent[0]}20`
-                        : `0 0 20px ${tab.color}60`
-                    }}
-                  >
-                    {React.createElement(tab.icon, {
-                      className: `text-4xl ${activeTab === tab.id ? 'animate-pulse' : ''}`,
-                      style: { color: tab.color }
-                    })}
-                    <span className={`text-2xl font-black tracking-wider ${activeTab === tab.id ? '' : 'opacity-80'}`} style={{ color: tab.color }}>
-                      {tab.label}
-                    </span>
-                    {tab.count !== undefined && (
-                      <span className="px-6 py-3 rounded-full text-xl font-black" style={{
-                        background: `linear-gradient(135deg, ${tab.color}, ${currentPalette.accent[0]})`,
-                        boxShadow: `0 0 30px ${tab.color}`,
-                        color: 'white'
-                      }}>
-                        {tab.count}
-                      </span>
-                    )}
-                    
-                    {activeTab === tab.id && (
-                      <motion.div
-                        layoutId="activeTab"
-                        className="absolute bottom-2 left-1/2 transform -translate-x-1/2 w-4/5 h-2 rounded-full"
-                        style={{ 
-                          background: `linear-gradient(90deg, ${tab.color}, ${currentPalette.accent[0]})`,
-                          boxShadow: `0 0 20px ${tab.color}`
-                        }}
-                      />
-                    )}
-                  </motion.button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      </motion.header>
-      
-      {/* Main Content */}
-      <motion.main 
-        initial={{ opacity: 0, y: 60 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3 }}
-        className="max-w-8xl mx-auto px-10 py-16 relative z-10"
-      >
-        <AnimatePresence mode="wait">
-          {activeTab === 'servers' && (
-            <motion.div
-              key="servers"
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -30 }}
-              className="relative"
-            >
-              {servers.length === 0 ? (
-                <EmptyState 
-                  title="NO QUANTUM SERVERS DETECTED"
-                  description="Initiate your first quantum server instance"
-                  icon={<FaServer />}
-                  action={() => setShowCreateModal(true)}
-                  actionText="ACTIVATE QUANTUM SERVER"
-                  colorPalette={currentPalette}
-                />
-              ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-12">
-                  {servers.map((server, index) => (
-                    <ServerCard 
-                      key={server.id || index}
-                      server={server}
-                      index={index}
-                      colorPalette={currentPalette}
-                      onEdit={() => {
-                        setEditForm({
-                          serverId: server.id || '',
-                          name: server.name || '',
-                          description: server.description || '',
-                          privacy: server.is_public ? 'public' : 'private',
-                          serverType: server.type || 'quantum'
-                        });
-                        setShowEditModal(true);
-                      }}
-                      onDelete={() => deleteServer(server.id)}
-                    />
-                  ))}
-                </div>
-              )}
-            </motion.div>
-          )}
-          
-          {activeTab === 'tokens' && (
-            <motion.div
-              key="tokens"
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -30 }}
-            >
-              {tokens.length === 0 ? (
-                <EmptyState 
-                  title="NO NEURAL TOKENS GENERATED"
-                  description="Create your first quantum access token"
-                  icon={<SiJsonwebtokens />}
-                  action={() => setShowTokenModal(true)}
-                  actionText="GENERATE QUANTUM TOKEN"
-                  colorPalette={currentPalette}
-                />
-              ) : (
-                <div className="space-y-12">
-                  {tokens.map((token, index) => (
-                    <TokenCard 
-                      key={token.id || index}
-                      token={token}
-                      index={index}
-                      colorPalette={currentPalette}
-                    />
-                  ))}
-                </div>
-              )}
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </motion.main>
-      
-      {/* Palette Modal */}
-      {showPaletteModal && (
-        <PaletteModal 
-          currentPalette={colorPalette}
-          setColorPalette={setColorPalette}
-          onClose={() => setShowPaletteModal(false)}
-          palettes={PSYCHEDELIC_PALETTES}
-        />
-      )}
-      
-      {/* Create Server Modal */}
-      {showCreateModal && (
-        <CreateServerModal 
-          form={serverForm}
-          onChange={setServerForm}
-          onSubmit={createServer}
-          onClose={() => setShowCreateModal(false)}
-          colorPalette={currentPalette}
-        />
-      )}
-      
-      {/* Edit Server Modal */}
-      {showEditModal && (
-        <EditServerModal 
-          form={editForm}
-          onChange={setEditForm}
-          onSubmit={updateServer}
-          onClose={() => setShowEditModal(false)}
-          colorPalette={currentPalette}
-        />
-      )}
-      
-      {/* Token Modal */}
-      {showTokenModal && (
-        <TokenModal 
-          form={tokenForm}
-          onChange={setTokenForm}
-          onSubmit={() => {}}
-          onClose={() => setShowTokenModal(false)}
-          colorPalette={currentPalette}
-        />
-      )}
-      
-      {/* Global Styles */}
-      <style jsx global>{`
-        @keyframes gradient {
-          0%, 100% { background-position: 0% 50%; }
-          50% { background-position: 100% 50%; }
-        }
-        
-        @keyframes float {
-          0%, 100% { transform: translateY(0px) rotate(0deg); }
-          50% { transform: translateY(-30px) rotate(180deg); }
-        }
-        
-        @keyframes pulse-glow {
-          0%, 100% { 
-            opacity: 0.5;
-            filter: blur(5px);
-          }
-          50% { 
-            opacity: 1;
-            filter: blur(10px);
-          }
-        }
-        
-        @keyframes shimmer {
-          0% { transform: translateX(-100%); }
-          100% { transform: translateX(100%); }
-        }
-        
-        .animate-float {
-          animation: float 6s ease-in-out infinite;
-        }
-        
-        .animate-pulse-glow {
-          animation: pulse-glow 2s ease-in-out infinite;
-        }
-        
-        .animate-shimmer {
-          animation: shimmer 2s infinite;
-        }
-        
-        /* Custom scrollbar */
-        ::-webkit-scrollbar {
-          width: 16px;
-          background: transparent;
-        }
-        
-        ::-webkit-scrollbar-track {
-          background: ${currentPalette.bg};
-          border-radius: 20px;
-          border: 2px solid ${currentPalette.primary[0]};
-        }
-        
-        :: webkit-scrollbar-thumb {
-          background: linear-gradient(135deg, ${currentPalette.primary[0]}, ${currentPalette.primary[1]});
-          border-radius: 20px;
-          border: 3px solid ${currentPalette.accent[0]};
-          box-shadow: 0 0 20px ${currentPalette.primary[0]};
-        }
-        
-        ::-webkit-scrollbar-thumb:hover {
-          background: linear-gradient(135deg, ${currentPalette.primary[1]}, ${currentPalette.primary[2]});
-          box-shadow: 0 0 30px ${currentPalette.primary[1]};
-        }
-        
-        /* Selection color */
-        ::selection {
-          background: ${currentPalette.primary[0]}80;
-          color: white;
-          text-shadow: 0 0 10px white;
-        }
-        
-        /* Smooth transitions */
-        * {
-          transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55) !important;
-        }
-      `}</style>
-    </div>
-  );
-};
-
-// Server Card Component - PURE COLOR EXPLOSION
+// Server Card Component
 const ServerCard = ({ server, index, colorPalette, onEdit, onDelete }) => {
   const [isHovered, setIsHovered] = useState(false);
   
@@ -1411,7 +404,6 @@ const PaletteModal = ({ currentPalette, setColorPalette, onClose, palettes }) =>
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
         className="absolute inset-0 backdrop-blur-3xl"
         style={{ background: palettes[currentPalette].bg }}
         onClick={onClose}
@@ -1421,7 +413,6 @@ const PaletteModal = ({ currentPalette, setColorPalette, onClose, palettes }) =>
       <motion.div
         initial={{ scale: 0.8, opacity: 0, rotateX: 45 }}
         animate={{ scale: 1, opacity: 1, rotateX: 0 }}
-        exit={{ scale: 0.8, opacity: 0, rotateX: -45 }}
         className="relative rounded-5xl p-16 w-full max-w-6xl"
         style={{
           background: palettes[currentPalette].bg,
@@ -1515,37 +506,15 @@ const CreateServerModal = ({ form, onChange, onSubmit, onClose, colorPalette }) 
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
         className="absolute inset-0 backdrop-blur-4xl"
         style={{ background: colorPalette.bg }}
         onClick={onClose}
       />
       
-      {/* Animated Border */}
-      <div className="absolute inset-8 rounded-6xl overflow-hidden">
-        {colorPalette.primary.map((color, i) => (
-          <motion.div
-            key={i}
-            animate={{ 
-              x: [0, 100, 0],
-              background: [`linear-gradient(90deg, transparent, ${color}, transparent)`, 
-                         `linear-gradient(90deg, transparent, ${colorPalette.secondary[i]}, transparent)`]
-            }}
-            transition={{ duration: 8 + i * 2, repeat: Infinity }}
-            className="absolute h-2 w-full"
-            style={{
-              top: `${i * 20}%`,
-              filter: 'blur(20px)'
-            }}
-          />
-        ))}
-      </div>
-      
       {/* Modal Content */}
       <motion.div
         initial={{ scale: 0.8, opacity: 0, rotateY: 45 }}
         animate={{ scale: 1, opacity: 1, rotateY: 0 }}
-        exit={{ scale: 0.8, opacity: 0, rotateY: -45 }}
         className="relative rounded-6xl p-16 w-full max-w-5xl"
         style={{
           background: colorPalette.bg,
@@ -2256,6 +1225,853 @@ const TokenModal = ({ form, onChange, onSubmit, onClose, colorPalette }) => {
           </motion.button>
         </div>
       </motion.div>
+    </div>
+  );
+};
+
+// Main Component
+const ServerProfileManager = () => {
+  // State
+  const [servers, setServers] = useState([]);
+  const [tokens, setTokens] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('servers');
+  const [message, setMessage] = useState({ type: '', text: '' });
+  const [colorPalette, setColorPalette] = useState('NEON_EXPLOSION');
+  const [visualIntensity, setVisualIntensity] = useState(100);
+  const [audioEnabled, setAudioEnabled] = useState(false);
+  
+  // Modals
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showTokenModal, setShowTokenModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showPaletteModal, setShowPaletteModal] = useState(false);
+  
+  // Forms
+  const [serverForm, setServerForm] = useState({
+    name: '',
+    description: '',
+    privacy: 'public',
+    generateToken: false,
+    serverType: 'quantum',
+    powerLevel: 100
+  });
+  
+  const [tokenForm, setTokenForm] = useState({
+    table_name: 'servers',
+    record_id: '',
+    permissions: { read: true, write: true, delete: false, admin: false },
+    expires_in_hours: 72,
+    tokenType: 'quantum'
+  });
+  
+  const [editForm, setEditForm] = useState({
+    serverId: '',
+    name: '',
+    description: '',
+    privacy: 'public',
+    serverType: 'quantum'
+  });
+
+  // Refs
+  const canvasRef = useRef(null);
+  const threeRef = useRef({ scene: null, camera: null, renderer: null, particles: null });
+  const rafRef = useRef(null);
+  const frameInterval = 1000 / 30;
+
+  const currentPalette = PSYCHEDELIC_PALETTES[colorPalette];
+
+  // Simplified Three.js Psychedelic Background
+  useEffect(() => {
+    if (!canvasRef.current) return;
+    
+    let mounted = true;
+
+    const initThreeJS = () => {
+      if (!mounted || !canvasRef.current) return;
+
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+      
+      let renderer;
+      try {
+        renderer = new THREE.WebGLRenderer({ 
+          canvas: canvasRef.current,
+          alpha: true,
+          antialias: true,
+          powerPreference: "high-performance"
+        });
+      } catch (error) {
+        console.warn('WebGL not available, skipping Three.js background');
+        return;
+      }
+      
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      
+      // Simple particles
+      const particlesCount = 500;
+      const positions = new Float32Array(particlesCount * 3);
+      const colors = new Float32Array(particlesCount * 3);
+      const sizes = new Float32Array(particlesCount);
+      
+      for (let i = 0; i < particlesCount; i++) {
+        const i3 = i * 3;
+        positions[i3] = (Math.random() - 0.5) * 2000;
+        positions[i3 + 1] = (Math.random() - 0.5) * 2000;
+        positions[i3 + 2] = (Math.random() - 0.5) * 2000;
+        
+        const color = currentPalette.primary[Math.floor(Math.random() * currentPalette.primary.length)];
+        const hex = parseInt(color.replace('#', ''), 16);
+        colors[i3] = ((hex >> 16) & 255) / 255;
+        colors[i3 + 1] = ((hex >> 8) & 255) / 255;
+        colors[i3 + 2] = (hex & 255) / 255;
+        
+        sizes[i] = Math.random() * 2 + 0.5;
+      }
+      
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+      
+      const material = new THREE.PointsMaterial({
+        size: 2,
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.6,
+        sizeAttenuation: true,
+        blending: THREE.AdditiveBlending
+      });
+      
+      const particles = new THREE.Points(geometry, material);
+      scene.add(particles);
+      
+      camera.position.z = 500;
+      
+      threeRef.current = { scene, camera, renderer, particles };
+      
+      let time = 0;
+      const animate = () => {
+        if (!mounted || !threeRef.current.renderer) return;
+        
+        rafRef.current = requestAnimationFrame(animate);
+        
+        time += 0.01;
+        
+        if (threeRef.current.particles) {
+          threeRef.current.particles.rotation.x = time * 0.05;
+          threeRef.current.particles.rotation.y = time * 0.03;
+        }
+        
+        threeRef.current.renderer.render(threeRef.current.scene, threeRef.current.camera);
+      };
+      
+      animate();
+      
+      const handleResize = () => {
+        if (threeRef.current.camera && threeRef.current.renderer) {
+          threeRef.current.camera.aspect = window.innerWidth / window.innerHeight;
+          threeRef.current.camera.updateProjectionMatrix();
+          threeRef.current.renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+      };
+      
+      window.addEventListener('resize', handleResize);
+      
+      return () => {
+        window.removeEventListener('resize', handleResize);
+        if (rafRef.current) cancelAnimationFrame(rafRef.current);
+        if (threeRef.current.renderer) {
+          threeRef.current.renderer.dispose();
+        }
+      };
+    };
+
+    initThreeJS();
+
+    return () => {
+      mounted = false;
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      if (threeRef.current.renderer) {
+        threeRef.current.renderer.dispose();
+      }
+    };
+  }, [colorPalette]);
+
+  // Fetch data
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        fetchServers();
+        fetchTokens();
+      } catch (error) {
+        console.error('Error loading data:', error);
+        setLoading(false);
+      }
+    };
+    loadData();
+  }, []);
+
+  const fetchServers = async () => {
+    try {
+      const response = await fetch('/api/create-server', { 
+        credentials: 'include',
+        headers: { 'Cache-Control': 'no-cache' }
+      });
+      if (!response.ok) throw new Error('Network response was not ok');
+      const result = await response.json();
+      if (result.success) setServers(Array.isArray(result.servers) ? result.servers : []);
+    } catch (error) {
+      console.error('Error fetching servers:', error);
+      showMessage('error', 'Connection Error');
+    }
+  };
+
+  const fetchTokens = async () => {
+    try {
+      const response = await fetch('/api/create-server?getTokens=true', { 
+        credentials: 'include',
+        headers: { 'Cache-Control': 'no-cache' }
+      });
+      if (!response.ok) throw new Error('Network response was not ok');
+      const result = await response.json();
+      if (result.success) setTokens(Array.isArray(result.tokens) ? result.tokens : []);
+    } catch (error) {
+      console.error('Error fetching tokens:', error);
+      showMessage('error', 'Connection Error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const createServer = async () => {
+    try {
+      const response = await fetch('/api/create-server', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(serverForm)
+      });
+      const result = await response.json();
+      if (result.success) {
+        showMessage('success', '🚀 QUANTUM SERVER ACTIVATED!');
+        setShowCreateModal(false);
+        setServerForm({ name: '', description: '', privacy: 'public', generateToken: false, serverType: 'quantum', powerLevel: 100 });
+        fetchServers();
+        if (result.token) showMessage('success', '🔑 NEURAL TOKEN GENERATED!');
+      }
+    } catch (error) {
+      console.error('Error creating server:', error);
+      showMessage('error', 'Quantum Flux Error');
+    }
+  };
+
+  const updateServer = async () => {
+    try {
+      const response = await fetch('/api/create-server', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(editForm)
+      });
+      const result = await response.json();
+      if (result.success) {
+        showMessage('success', '⚡ SERVER RESYNCHRONIZED!');
+        setShowEditModal(false);
+        fetchServers();
+      }
+    } catch (error) {
+      console.error('Error updating server:', error);
+      showMessage('error', 'Sync Failure');
+    }
+  };
+
+  const deleteServer = async (serverId) => {
+    const confirmed = await immersiveConfirm('QUANTUM DECOMPILATION', 'Initiate server de-rez protocol?');
+    if (!confirmed) return;
+    try {
+      const response = await fetch('/api/create-server', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ serverId })
+      });
+      const result = await response.json();
+      if (result.success) {
+        showMessage('success', '💥 SERVER DISINTEGRATED');
+        fetchServers();
+      }
+    } catch (error) {
+      console.error('Error deleting server:', error);
+      showMessage('error', 'Decomp Failed');
+    }
+  };
+
+  const showMessage = (type, text) => {
+    setMessage({ type, text });
+    setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+  };
+
+  const immersiveConfirm = async (title, message) => {
+    return new Promise((resolve) => {
+      const modal = document.createElement('div');
+      modal.className = 'fixed inset-0 z-[9999] flex items-center justify-center';
+      modal.innerHTML = `
+        <div class="absolute inset-0" style="background: ${currentPalette.bg}"></div>
+        <div class="relative z-10 p-12 rounded-4xl max-w-md w-full mx-4" style="
+          background: ${currentPalette.bg};
+          border: 4px solid ${currentPalette.primary[0]};
+          box-shadow: 0 0 100px ${currentPalette.primary[0]};
+        ">
+          <div class="text-center mb-8">
+            <div class="w-32 h-32 mx-auto mb-6 rounded-full flex items-center justify-center animate-pulse" style="
+              border: 4px solid ${currentPalette.primary[1]};
+              box-shadow: 0 0 60px ${currentPalette.primary[1]};
+              background: ${currentPalette.bg};
+            ">
+              <div class="text-6xl" style="color: ${currentPalette.primary[2]}">💣</div>
+            </div>
+            <h3 class="text-4xl font-black mb-4" style="color: ${currentPalette.primary[0]}">${title}</h3>
+            <p class="text-2xl" style="color: ${currentPalette.secondary[0]}">${message}</p>
+          </div>
+          <div class="grid grid-cols-2 gap-6">
+            <button id="confirm-cancel" class="px-8 py-4 rounded-2xl text-2xl font-black transition-all duration-300 hover:scale-105" style="
+              background: ${currentPalette.bg};
+              border: 3px solid ${currentPalette.primary[3]};
+              color: ${currentPalette.primary[3]};
+              box-shadow: 0 0 30px ${currentPalette.primary[3]};
+            ">
+              ABORT
+            </button>
+            <button id="confirm-ok" class="px-8 py-4 rounded-2xl text-2xl font-black transition-all duration-300 hover:scale-105" style="
+              background: linear-gradient(135deg, ${currentPalette.primary[0]}, ${currentPalette.primary[1]});
+              color: white;
+              box-shadow: 0 0 50px ${currentPalette.primary[0]};
+            ">
+              CONFIRM
+            </button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+      document.getElementById('confirm-cancel').onclick = () => { modal.remove(); resolve(false); };
+      document.getElementById('confirm-ok').onclick = () => { modal.remove(); resolve(true); };
+    });
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen relative overflow-hidden" style={{ background: currentPalette.bg }}>
+        <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
+        
+        <div className="relative z-10 flex flex-col items-center justify-center min-h-screen">
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ type: "spring", damping: 15 }}
+            className="relative mb-16"
+          >
+            {currentPalette.primary.map((color, i) => (
+              <motion.div
+                key={i}
+                animate={{ 
+                  rotate: 360,
+                  scale: [1, 1.2, 1]
+                }}
+                transition={{ 
+                  duration: 8 + i * 2,
+                  repeat: Infinity,
+                  ease: "linear"
+                }}
+                className="absolute -inset-12 rounded-full"
+                style={{
+                  border: `4px solid ${color}`,
+                  filter: `blur(${4 + i}px)`,
+                  opacity: 0.2
+                }}
+              />
+            ))}
+            
+            <div className="relative w-80 h-80 rounded-full flex items-center justify-center" style={{
+              background: `radial-gradient(circle, ${currentPalette.primary[0]}30, transparent 70%)`,
+              border: `6px solid ${currentPalette.primary[1]}`,
+              boxShadow: `0 0 100px ${currentPalette.primary[1]}, inset 0 0 100px ${currentPalette.primary[2]}`
+            }}>
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+                className="absolute inset-8 rounded-full border-4"
+                style={{ borderColor: currentPalette.primary[3] }}
+              />
+              <FaServer className="text-9xl" style={{ color: currentPalette.primary[4] }} />
+            </div>
+          </motion.div>
+
+          <motion.div
+            initial={{ y: 40, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.5 }}
+            className="text-center"
+          >
+            <h1 className="text-8xl font-black mb-10 tracking-tighter">
+              {currentPalette.primary.map((color, i) => (
+                <motion.span
+                  key={i}
+                  animate={{ y: [0, -10, 0] }}
+                  transition={{ duration: 2, delay: i * 0.2, repeat: Infinity }}
+                  className="inline-block"
+                  style={{ color, textShadow: `0 0 30px ${color}` }}
+                >
+                  HYPERDOCK
+                </motion.span>
+              ))}
+            </h1>
+            
+            <div className="relative w-[800px] h-4 rounded-full overflow-hidden mx-auto mb-14" style={{
+              background: `linear-gradient(90deg, ${currentPalette.primary.join(', ')})`,
+              opacity: 0.6
+            }}>
+              <motion.div
+                initial={{ x: "-100%" }}
+                animate={{ x: "100%" }}
+                transition={{ duration: 2, repeat: Infinity }}
+                className="absolute inset-y-0 w-1/3"
+                style={{
+                  background: `linear-gradient(90deg, transparent, white, transparent)`,
+                  filter: 'blur(10px)'
+                }}
+              />
+            </div>
+            
+            <div className="space-y-6">
+              {['INITIALIZING QUANTUM CORE', 'CALIBRATING NEURAL MATRIX', 'SYNCING CYBERSPACE', 'BOOTING HYPERDRIVE'].map((text, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ x: -200, opacity: 0 }}
+                  animate={{ x: 0, opacity: 1 }}
+                  transition={{ delay: 1 + i * 0.3 }}
+                  className="text-3xl font-bold flex items-center justify-center space-x-4"
+                  style={{ color: currentPalette.secondary[i % currentPalette.secondary.length] }}
+                >
+                  <div className="w-4 h-4 rounded-full animate-pulse" style={{
+                    background: currentPalette.accent[i % currentPalette.accent.length],
+                    boxShadow: `0 0 20px ${currentPalette.accent[i % currentPalette.accent.length]}`
+                  }} />
+                  <span style={{ textShadow: `0 0 20px ${currentPalette.secondary[i % currentPalette.secondary.length]}` }}>
+                    {text}
+                  </span>
+                  <div className="w-4 h-4 rounded-full animate-pulse" style={{
+                    background: currentPalette.accent[i % currentPalette.accent.length],
+                    boxShadow: `0 0 20px ${currentPalette.accent[i % currentPalette.accent.length]}`
+                  }} />
+                </motion.div>
+              ))}
+            </div>
+          </motion.div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen relative overflow-hidden" style={{ background: currentPalette.bg }}>
+      {/* Three.js Psychedelic Background */}
+      <canvas 
+        ref={canvasRef} 
+        className="fixed inset-0 w-full h-full pointer-events-none"
+        style={{ zIndex: 0 }}
+      />
+      
+      {/* Pulsing Border */}
+      <div className="fixed inset-0 pointer-events-none z-1">
+        {currentPalette.primary.map((color, i) => (
+          <motion.div
+            key={i}
+            animate={{ 
+              scale: [1, 1.02, 1],
+              opacity: [0.1, 0.3, 0.1]
+            }}
+            transition={{ 
+              duration: 3 + i,
+              repeat: Infinity,
+              ease: "easeInOut"
+            }}
+            className="absolute inset-0 border-[20px] rounded-[100px]"
+            style={{ 
+              borderColor: color,
+              filter: 'blur(20px)'
+            }}
+          />
+        ))}
+      </div>
+      
+      {/* Main Header */}
+      <motion.header
+        initial={{ y: -100, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ type: "spring", stiffness: 100, damping: 20 }}
+        className="relative z-10"
+      >
+        <div className="max-w-8xl mx-auto px-10 py-16">
+          <div className="flex items-center justify-between mb-20">
+            <div className="flex items-center space-x-10">
+              <motion.div
+                whileHover={{ scale: 1.1, rotate: 360 }}
+                transition={{ duration: 0.8 }}
+                className="relative"
+              >
+                <div className="relative p-12 rounded-5xl shadow-2xl" style={{
+                  background: `linear-gradient(135deg, ${currentPalette.primary[0]}30, ${currentPalette.primary[1]}20, ${currentPalette.primary[2]}10)`,
+                  border: `6px solid ${currentPalette.primary[3]}`,
+                  boxShadow: `0 0 100px ${currentPalette.primary[3]}, inset 0 0 100px ${currentPalette.primary[4]}`
+                }}>
+                  <FaServer className="text-8xl" style={{ color: currentPalette.primary[6] }} />
+                </div>
+              </motion.div>
+              
+              <div>
+                <motion.h1 
+                  initial={{ opacity: 0, y: 30 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="text-9xl font-black mb-8 tracking-tighter"
+                >
+                  {currentPalette.primary.map((color, i) => (
+                    <motion.span
+                      key={i}
+                      animate={{ 
+                        y: [0, -15, 0],
+                        textShadow: [
+                          `0 0 10px ${color}`,
+                          `0 0 40px ${color}`,
+                          `0 0 10px ${color}`
+                        ]
+                      }}
+                      transition={{ 
+                        duration: 2,
+                        delay: i * 0.1,
+                        repeat: Infinity 
+                      }}
+                      className="inline-block mr-2"
+                      style={{ color }}
+                    >
+                      HYPERDOCK
+                    </motion.span>
+                  ))}
+                </motion.h1>
+                <motion.p 
+                  initial={{ opacity: 0, y: 30 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.2 }}
+                  className="text-4xl flex items-center space-x-6"
+                  style={{ color: currentPalette.secondary[0] }}
+                >
+                  <span className="font-black tracking-widest">QUANTUM SERVER MANAGEMENT INTERFACE</span>
+                </motion.p>
+              </div>
+            </div>
+            
+            <div className="flex space-x-8">
+              <ParallaxTilt
+                tiltMaxAngleX={20}
+                tiltMaxAngleY={20}
+                scale={1.15}
+                glareEnable={true}
+                glareMaxOpacity={0.9}
+                glareColor={currentPalette.primary[0]}
+                className="relative"
+              >
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => setShowCreateModal(true)}
+                  className="relative group"
+                >
+                  <div className="relative px-20 py-8 rounded-5xl font-black text-3xl flex items-center space-x-8 overflow-hidden" style={{
+                    background: `linear-gradient(135deg, ${currentPalette.primary[0]}, ${currentPalette.primary[1]}, ${currentPalette.primary[2]})`,
+                    border: `4px solid ${currentPalette.primary[3]}`,
+                    boxShadow: `0 0 80px ${currentPalette.primary[0]}`
+                  }}>
+                    <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/30 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
+                    <FaRocket className="text-5xl" />
+                    <span className="tracking-widest">ACTIVATE SERVER</span>
+                    <FaBolt className="text-5xl" />
+                  </div>
+                </motion.button>
+              </ParallaxTilt>
+              
+              <ParallaxTilt
+                tiltMaxAngleX={20}
+                tiltMaxAngleY={20}
+                scale={1.15}
+                glareEnable={true}
+                glareMaxOpacity={0.9}
+                glareColor={currentPalette.secondary[0]}
+                className="relative"
+              >
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => setShowTokenModal(true)}
+                  className="relative group"
+                >
+                  <div className="relative px-20 py-8 rounded-5xl font-black text-3xl flex items-center space-x-8 overflow-hidden" style={{
+                    background: `linear-gradient(135deg, ${currentPalette.secondary[0]}, ${currentPalette.secondary[1]}, ${currentPalette.secondary[2]})`,
+                    border: `4px solid ${currentPalette.secondary[3]}`,
+                    boxShadow: `0 0 80px ${currentPalette.secondary[0]}`
+                  }}>
+                    <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/30 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
+                    <SiJsonwebtokens className="text-5xl" />
+                    <span className="tracking-widest">GENERATE TOKEN</span>
+                    <FaKey className="text-5xl" />
+                  </div>
+                </motion.button>
+              </ParallaxTilt>
+            </div>
+          </div>
+          
+          {/* Tabs */}
+          <div className="relative">
+            <div className="absolute inset-0 rounded-5xl backdrop-blur-2xl" style={{
+              background: `linear-gradient(135deg, ${currentPalette.primary.map(c => c + '20').join(', ')})`,
+              border: `3px solid ${currentPalette.primary[0]}`,
+              boxShadow: `0 0 60px ${currentPalette.primary[0]}`
+            }} />
+            
+            <div className="relative z-10 p-3">
+              <div className="flex space-x-4">
+                {[
+                  { id: 'servers', label: 'QUANTUM SERVERS', icon: FaServer, count: servers.length, color: currentPalette.primary[0] },
+                  { id: 'tokens', label: 'NEURAL TOKENS', icon: SiJsonwebtokens, count: tokens.length, color: currentPalette.primary[1] },
+                  { id: 'settings', label: 'DIMENSION SETTINGS', icon: FaCog, color: currentPalette.primary[4] }
+                ].map((tab) => (
+                  <motion.button
+                    key={tab.id}
+                    whileHover={{ scale: 1.05, y: -4 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`relative flex-1 py-10 px-8 rounded-4xl transition-all duration-300 flex items-center justify-center space-x-6 group ${
+                      activeTab === tab.id ? 'scale-105' : ''
+                    }`}
+                    style={{
+                      background: activeTab === tab.id 
+                        ? `linear-gradient(135deg, ${tab.color}40, ${currentPalette.secondary[0]}20, transparent)`
+                        : `linear-gradient(135deg, ${tab.color}20, transparent)`,
+                      border: `3px solid ${activeTab === tab.id ? tab.color : tab.color + '60'}`,
+                      boxShadow: activeTab === tab.id 
+                        ? `0 0 40px ${tab.color}, inset 0 0 40px ${currentPalette.accent[0]}20`
+                        : `0 0 20px ${tab.color}60`
+                    }}
+                  >
+                    {React.createElement(tab.icon, {
+                      className: `text-4xl ${activeTab === tab.id ? 'animate-pulse' : ''}`,
+                      style: { color: tab.color }
+                    })}
+                    <span className={`text-2xl font-black tracking-wider ${activeTab === tab.id ? '' : 'opacity-80'}`} style={{ color: tab.color }}>
+                      {tab.label}
+                    </span>
+                    {tab.count !== undefined && (
+                      <span className="px-6 py-3 rounded-full text-xl font-black" style={{
+                        background: `linear-gradient(135deg, ${tab.color}, ${currentPalette.accent[0]})`,
+                        boxShadow: `0 0 30px ${tab.color}`,
+                        color: 'white'
+                      }}>
+                        {tab.count}
+                      </span>
+                    )}
+                  </motion.button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </motion.header>
+      
+      {/* Main Content */}
+      <motion.main 
+        initial={{ opacity: 0, y: 60 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.3 }}
+        className="max-w-8xl mx-auto px-10 py-16 relative z-10"
+      >
+        <AnimatePresence mode="wait">
+          {activeTab === 'servers' && (
+            <motion.div
+              key="servers"
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -30 }}
+              className="relative"
+            >
+              {servers.length === 0 ? (
+                <EmptyState 
+                  title="NO QUANTUM SERVERS DETECTED"
+                  description="Initiate your first quantum server instance"
+                  icon={<FaServer />}
+                  action={() => setShowCreateModal(true)}
+                  actionText="ACTIVATE QUANTUM SERVER"
+                  colorPalette={currentPalette}
+                />
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-12">
+                  {servers.map((server, index) => (
+                    <ServerCard 
+                      key={server.id || index}
+                      server={server}
+                      index={index}
+                      colorPalette={currentPalette}
+                      onEdit={() => {
+                        setEditForm({
+                          serverId: server.id || '',
+                          name: server.name || '',
+                          description: server.description || '',
+                          privacy: server.is_public ? 'public' : 'private',
+                          serverType: server.type || 'quantum'
+                        });
+                        setShowEditModal(true);
+                      }}
+                      onDelete={() => deleteServer(server.id)}
+                    />
+                  ))}
+                </div>
+              )}
+            </motion.div>
+          )}
+          
+          {activeTab === 'tokens' && (
+            <motion.div
+              key="tokens"
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -30 }}
+            >
+              {tokens.length === 0 ? (
+                <EmptyState 
+                  title="NO NEURAL TOKENS GENERATED"
+                  description="Create your first quantum access token"
+                  icon={<SiJsonwebtokens />}
+                  action={() => setShowTokenModal(true)}
+                  actionText="GENERATE QUANTUM TOKEN"
+                  colorPalette={currentPalette}
+                />
+              ) : (
+                <div className="space-y-12">
+                  {tokens.map((token, index) => (
+                    <TokenCard 
+                      key={token.id || index}
+                      token={token}
+                      index={index}
+                      colorPalette={currentPalette}
+                    />
+                  ))}
+                </div>
+              )}
+            </motion.div>
+          )}
+          
+          {activeTab === 'settings' && (
+            <motion.div
+              key="settings"
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -30 }}
+              className="relative"
+            >
+              <div className="text-center py-40">
+                <h2 className="text-6xl font-black mb-10" style={{ color: currentPalette.primary[0] }}>
+                  SETTINGS COMING SOON
+                </h2>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.main>
+      
+      {/* Message Toast */}
+      {message.text && (
+        <motion.div
+          initial={{ y: 100, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: 100, opacity: 0 }}
+          className="fixed bottom-8 left-1/2 transform -translate-x-1/2 z-50 px-8 py-6 rounded-4xl text-2xl font-black"
+          style={{
+            background: message.type === 'success' 
+              ? `linear-gradient(135deg, ${currentPalette.primary[0]}, ${currentPalette.primary[1]})`
+              : `linear-gradient(135deg, #FF0000, #FF3300)`,
+            boxShadow: `0 0 60px ${currentPalette.primary[0]}`,
+            color: 'white'
+          }}
+        >
+          {message.text}
+        </motion.div>
+      )}
+      
+      {/* Palette Selector */}
+      <div className="fixed top-6 right-6 z-50">
+        <ParallaxTilt
+          tiltMaxAngleX={15}
+          tiltMaxAngleY={15}
+          scale={1.1}
+          glareEnable={true}
+          glareMaxOpacity={0.8}
+          className="relative"
+        >
+          <motion.button
+            whileHover={{ scale: 1.1, rotate: 360 }}
+            whileTap={{ scale: 0.9 }}
+            onClick={() => setShowPaletteModal(!showPaletteModal)}
+            className="p-4 rounded-3xl shadow-2xl flex items-center justify-center"
+            style={{
+              background: `linear-gradient(135deg, ${currentPalette.primary[0]}, ${currentPalette.primary[1]})`,
+              border: `3px solid ${currentPalette.primary[2]}`,
+              boxShadow: `0 0 50px ${currentPalette.primary[0]}`
+            }}
+          >
+            <FaPaletteIcon className="text-3xl" style={{ color: 'white' }} />
+          </motion.button>
+        </ParallaxTilt>
+      </div>
+      
+      {/* Modals */}
+      {showPaletteModal && (
+        <PaletteModal 
+          currentPalette={colorPalette}
+          setColorPalette={setColorPalette}
+          onClose={() => setShowPaletteModal(false)}
+          palettes={PSYCHEDELIC_PALETTES}
+        />
+      )}
+      
+      {showCreateModal && (
+        <CreateServerModal 
+          form={serverForm}
+          onChange={setServerForm}
+          onSubmit={createServer}
+          onClose={() => setShowCreateModal(false)}
+          colorPalette={currentPalette}
+        />
+      )}
+      
+      {showEditModal && (
+        <EditServerModal 
+          form={editForm}
+          onChange={setEditForm}
+          onSubmit={updateServer}
+          onClose={() => setShowEditModal(false)}
+          colorPalette={currentPalette}
+        />
+      )}
+      
+      {showTokenModal && (
+        <TokenModal 
+          form={tokenForm}
+          onChange={setTokenForm}
+          onSubmit={() => {}}
+          onClose={() => setShowTokenModal(false)}
+          colorPalette={currentPalette}
+        />
+      )}
     </div>
   );
 };
