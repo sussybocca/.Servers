@@ -528,9 +528,18 @@ export default function ExplorePage() {
     setShowImmersiveView(false);
     
     try {
-      // Load comprehensive server data using the new API
-      const serverRes = await fetch(`/api/get-server?serverId=${serverId}&includeVersions=true&includeComments=true&includeStats=true&includeMembers=true`);
+      // Load comprehensive server data including files
+      const serverRes = await fetch(`/api/get-server?serverId=${serverId}&includeVersions=true&includeComments=true&includeStats=true&includeMembers=true&includeFiles=true`);
       const serverData = await serverRes.json();
+      
+      console.log('Server data received:', {
+        serverData,
+        hasVersions: !!serverData.versions,
+        versionCount: serverData.versions?.length || 0,
+        firstVersion: serverData.versions?.[0],
+        filesInResponse: serverData.files,
+        filesInFirstVersion: serverData.versions?.[0]?.files
+      });
       
       if (serverData.success) {
         const currentServer = serverData.server;
@@ -542,34 +551,94 @@ export default function ExplorePage() {
         if (serverData.versions) {
           setServerVersions(serverData.versions);
           
-          // Check if we have files in versions (assuming files are included in versions data)
+          // COLLECT FILES - MULTIPLE APPROACHES
           const allFiles = [];
+          
+          // APPROACH 1: Files might be at root level (serverData.files)
+          if (serverData.files && serverData.files.length > 0) {
+            console.log('Found files at root level:', serverData.files.length);
+            serverData.files.forEach(file => {
+              allFiles.push({
+                ...file,
+                path: file.path || file.name,
+                version_id: file.version_id,
+                version_name: serverData.versions.find(v => v.id === file.version_id)?.version_name || 'unknown'
+              });
+            });
+          }
+          
+          // APPROACH 2: Files might be nested in versions (version.files)
           serverData.versions.forEach(version => {
             if (version.files && version.files.length > 0) {
+              console.log(`Found ${version.files.length} files in version ${version.version_name}`);
               version.files.forEach(file => {
                 allFiles.push({
                   ...file,
+                  path: file.path || file.name,
                   version_id: version.id,
                   version_name: version.version_name
                 });
               });
             }
           });
+          
+          // APPROACH 3: Files might be in version_files table (separate from versions array)
+          if (serverData.version_files && serverData.version_files.length > 0) {
+            console.log('Found version_files:', serverData.version_files.length);
+            serverData.version_files.forEach(file => {
+              allFiles.push({
+                ...file,
+                path: file.path,
+                content: file.content,
+                version_id: file.version_id,
+                version_name: serverData.versions.find(v => v.id === file.version_id)?.version_name || 'unknown'
+              });
+            });
+          }
+          
+          console.log('Total files collected:', allFiles.length, allFiles);
           setServerFiles(allFiles);
           
-          // Find index.html file
+          // FIND AND SET CONTENT - MULTIPLE ATTEMPTS
+          let foundContent = false;
+          
+          // Try index.html first
           const indexFile = allFiles.find(f => 
-            f.path === '/index.html' || 
-            f.path.endsWith('/index.html') || 
-            f.path === 'index.html'
+            f.path && (
+              f.path === '/index.html' || 
+              f.path.endsWith('/index.html') || 
+              f.path === 'index.html' ||
+              f.path.includes('index.html') ||
+              f.name === 'index.html'
+            )
           );
           
           if (indexFile && indexFile.content) {
+            console.log('Found index.html:', indexFile.path);
             setServerContent(indexFile.content);
-          } else {
+            foundContent = true;
+          }
+          
+          // Try any HTML file if no index.html found
+          if (!foundContent && allFiles.length > 0) {
+            const firstHtml = allFiles.find(f => 
+              f.path && (f.path.endsWith('.html') || f.name?.endsWith('.html'))
+            );
+            
+            if (firstHtml && firstHtml.content) {
+              console.log('Found HTML file:', firstHtml.path);
+              setServerContent(firstHtml.content);
+              foundContent = true;
+            }
+          }
+          
+          // Generate default page if no content found
+          if (!foundContent) {
+            console.log('No content found, generating default page');
             setServerContent(generateDefaultPage(currentServer, serverData.versions[0]));
           }
         } else {
+          console.log('No versions found, generating default page');
           setServerContent(generateDefaultPage(currentServer, null));
         }
         
@@ -587,6 +656,9 @@ export default function ExplorePage() {
         if (serverData.members) {
           setServerMembers(serverData.members);
         }
+      } else {
+        console.error('Server API error:', serverData.error);
+        setServerContent(generateErrorPage());
       }
       
     } catch (error) {
@@ -596,7 +668,8 @@ export default function ExplorePage() {
       setLoadingServer(false);
       setIframeKey(prev => prev + 1);
     }
-  };
+  }; 
+    
 
   const generateDefaultPage = (server, latestVersion) => {
     return `
