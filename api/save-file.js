@@ -97,16 +97,17 @@ export default async function handler(req, res) {
         // Use the first version
         actualVersionId = existingVersions[0].id;
       } else {
-        // Create a default version
+        // Create a default version - USE CORRECT COLUMN NAMES
         const { data: newVersion, error: versionError } = await supabase
           .from('server_versions')
           .insert({
             server_id: serverId,
             version_name: 'Initial Version',
             version_number: 'v1.0.0',
-            description: 'Default version',
-            is_published: false,
-            is_prerelease: false,
+            description: 'Default version created automatically',
+            is_released: false,      // Use correct column name from your schema
+            is_prerelease: false,    // Use correct column name from your schema
+            created_by: userId,      // This is REQUIRED - add the user ID
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
           })
