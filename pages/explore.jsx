@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from 'react';
 import Head from 'next/head';
 import { motion, AnimatePresence } from 'framer-motion';
 import Tilt from 'react-parallax-tilt';
+import * as THREE from 'three';
 
 export default function ExplorePage() {
   const [servers, setServers] = useState([]);
@@ -26,11 +27,33 @@ export default function ExplorePage() {
   const [newComment, setNewComment] = useState('');
   const [downloadingVersion, setDownloadingVersion] = useState(null);
   const [commentError, setCommentError] = useState('');
+  const [showImmersiveView, setShowImmersiveView] = useState(false);
+  const [immersiveLoading, setImmersiveLoading] = useState(false);
   const warningAccepted = useRef(false);
+  
+  // Three.js refs
+  const threeContainerRef = useRef(null);
+  const threeSceneRef = useRef(null);
+  const threeCameraRef = useRef(null);
+  const threeRendererRef = useRef(null);
+  const threeControlsRef = useRef(null);
+  const animationRef = useRef(null);
+  const serverObjectsRef = useRef([]);
+  const particlesRef = useRef([]);
 
   useEffect(() => {
     loadUser();
     loadServers();
+    
+    return () => {
+      // Cleanup Three.js
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+      if (threeRendererRef.current) {
+        threeRendererRef.current.dispose();
+      }
+    };
   }, []);
 
   const loadUser = async () => {
@@ -53,6 +76,387 @@ export default function ExplorePage() {
     } catch (error) {
       console.error('Failed to load servers:', error);
     }
+  };
+
+  // Initialize Three.js immersive view
+  const initImmersiveView = () => {
+    if (!threeContainerRef.current || !currentServer) return;
+
+    setImmersiveLoading(true);
+    
+    // Scene
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0a0a0a);
+    scene.fog = new THREE.Fog(0x0a0a0a, 1, 1000);
+    threeSceneRef.current = scene;
+
+    // Camera
+    const camera = new THREE.PerspectiveCamera(
+      75,
+      threeContainerRef.current.clientWidth / threeContainerRef.current.clientHeight,
+      0.1,
+      1000
+    );
+    camera.position.set(0, 5, 15);
+    threeCameraRef.current = camera;
+
+    // Renderer
+    const renderer = new THREE.WebGLRenderer({ 
+      antialias: true,
+      alpha: true 
+    });
+    renderer.setSize(
+      threeContainerRef.current.clientWidth,
+      threeContainerRef.current.clientHeight
+    );
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    threeContainerRef.current.appendChild(renderer.domElement);
+    threeRendererRef.current = renderer;
+
+    // Lighting
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+    scene.add(ambientLight);
+
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    directionalLight.position.set(10, 20, 15);
+    directionalLight.castShadow = true;
+    directionalLight.shadow.mapSize.width = 2048;
+    directionalLight.shadow.mapSize.height = 2048;
+    scene.add(directionalLight);
+
+    const hemisphereLight = new THREE.HemisphereLight(0x4285f4, 0xea4335, 0.3);
+    scene.add(hemisphereLight);
+
+    // Create server data structure
+    createServerDataStructure(scene);
+
+    // Create particles
+    createParticles(scene);
+
+    // Add floating server name
+    createServerTitle(scene);
+
+    // Animation loop
+    const animate = () => {
+      animationRef.current = requestAnimationFrame(animate);
+      updateParticles();
+      updateServerObjects();
+      
+      if (threeControlsRef.current) {
+        threeControlsRef.current.update();
+      }
+      
+      renderer.render(scene, camera);
+    };
+    animate();
+
+    // Handle resize
+    const handleResize = () => {
+      if (!threeContainerRef.current || !camera || !renderer) return;
+      
+      camera.aspect = threeContainerRef.current.clientWidth / threeContainerRef.current.clientHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(
+        threeContainerRef.current.clientWidth,
+        threeContainerRef.current.clientHeight
+      );
+    };
+    window.addEventListener('resize', handleResize);
+    
+    setImmersiveLoading(false);
+  };
+
+  const createServerDataStructure = (scene) => {
+    if (!currentServer) return;
+
+    // Clear previous objects
+    serverObjectsRef.current.forEach(obj => scene.remove(obj));
+    serverObjectsRef.current = [];
+
+    const server = currentServer;
+    
+    // Create central server core
+    const coreGeometry = new THREE.SphereGeometry(2, 32, 32);
+    const coreMaterial = new THREE.MeshPhongMaterial({
+      color: 0x4285f4,
+      shininess: 100,
+      emissive: 0x4285f4,
+      emissiveIntensity: 0.3,
+      transparent: true,
+      opacity: 0.8
+    });
+    const core = new THREE.Mesh(coreGeometry, coreMaterial);
+    core.castShadow = true;
+    core.receiveShadow = true;
+    scene.add(core);
+    serverObjectsRef.current.push(core);
+
+    // Create orbiting data nodes for files
+    const fileCount = Math.min(serverFiles.length, 30); // Limit to 30 nodes
+    for (let i = 0; i < fileCount; i++) {
+      const file = serverFiles[i];
+      const angle = (i / fileCount) * Math.PI * 2;
+      const radius = 5 + (i % 3) * 1.5;
+      const height = Math.sin(i * 0.3) * 3;
+
+      const nodeGeometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+      const nodeMaterial = new THREE.MeshPhongMaterial({
+        color: file.path.endsWith('.html') ? 0xff6b6b : 
+               file.path.endsWith('.js') ? 0x4285f4 : 
+               file.path.endsWith('.css') ? 0x34a853 : 0xfbbc05,
+        emissive: file.path.endsWith('.html') ? 0xff6b6b : 
+                 file.path.endsWith('.js') ? 0x4285f4 : 
+                 file.path.endsWith('.css') ? 0x34a853 : 0xfbbc05,
+        emissiveIntensity: 0.2,
+        transparent: true,
+        opacity: 0.9
+      });
+      
+      const node = new THREE.Mesh(nodeGeometry, nodeMaterial);
+      node.position.set(
+        Math.cos(angle) * radius,
+        height,
+        Math.sin(angle) * radius
+      );
+      node.castShadow = true;
+      node.receiveShadow = true;
+      
+      // Store animation properties
+      node.userData = {
+        angle: angle,
+        radius: radius,
+        height: height,
+        speed: 0.5 + Math.random() * 0.5,
+        offset: Math.random() * Math.PI * 2,
+        isFile: true,
+        fileInfo: file
+      };
+      
+      scene.add(node);
+      serverObjectsRef.current.push(node);
+
+      // Add connecting lines to core
+      const lineGeometry = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0, 0, 0),
+        node.position
+      ]);
+      const lineMaterial = new THREE.LineBasicMaterial({
+        color: 0x4285f4,
+        transparent: true,
+        opacity: 0.3,
+        linewidth: 1
+      });
+      const line = new THREE.Line(lineGeometry, lineMaterial);
+      scene.add(line);
+      serverObjectsRef.current.push(line);
+    }
+
+    // Create version rings
+    const versionCount = Math.min(serverVersions.length, 5);
+    for (let i = 0; i < versionCount; i++) {
+      const version = serverVersions[i];
+      const ringRadius = 8 + i * 1.5;
+      
+      const ringGeometry = new THREE.TorusGeometry(ringRadius, 0.1, 16, 100);
+      const ringMaterial = new THREE.MeshBasicMaterial({
+        color: i === 0 ? 0x34a853 : 0x8ab4f8,
+        transparent: true,
+        opacity: 0.2,
+        side: THREE.DoubleSide
+      });
+      const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+      ring.rotation.x = Math.PI / 2;
+      scene.add(ring);
+      serverObjectsRef.current.push(ring);
+
+      // Add version info text (using sprites)
+      createVersionLabel(scene, version, ringRadius);
+    }
+  };
+
+  const createParticles = (scene) => {
+    const particleCount = 1000;
+    const particles = new THREE.BufferGeometry();
+    const positions = new Float32Array(particleCount * 3);
+    const colors = new Float32Array(particleCount * 3);
+
+    for (let i = 0; i < particleCount; i++) {
+      const i3 = i * 3;
+      
+      // Random positions in a sphere
+      const radius = 15 + Math.random() * 10;
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      
+      positions[i3] = radius * Math.sin(phi) * Math.cos(theta);
+      positions[i3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
+      positions[i3 + 2] = radius * Math.cos(phi);
+      
+      // Random colors
+      colors[i3] = Math.random() * 0.5 + 0.5; // R
+      colors[i3 + 1] = Math.random() * 0.3 + 0.7; // G
+      colors[i3 + 2] = Math.random() * 0.5 + 0.5; // B
+    }
+
+    particles.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    particles.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    const particleMaterial = new THREE.PointsMaterial({
+      size: 0.1,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.6,
+      blending: THREE.AdditiveBlending
+    });
+
+    const particleSystem = new THREE.Points(particles, particleMaterial);
+    scene.add(particleSystem);
+    particlesRef.current.push(particleSystem);
+  };
+
+  const createServerTitle = (scene) => {
+    if (!currentServer) return;
+
+    // Create a canvas for text
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    canvas.width = 1024;
+    canvas.height = 256;
+    
+    context.fillStyle = '#0a0a0a';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    
+    context.font = 'bold 80px Arial';
+    context.fillStyle = '#ffffff';
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.fillText(currentServer.name, canvas.width / 2, canvas.height / 2);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    const spriteMaterial = new THREE.SpriteMaterial({
+      map: texture,
+      transparent: true,
+      opacity: 0.8
+    });
+    
+    const sprite = new THREE.Sprite(spriteMaterial);
+    sprite.position.set(0, 10, 0);
+    sprite.scale.set(10, 2.5, 1);
+    scene.add(sprite);
+    serverObjectsRef.current.push(sprite);
+  };
+
+  const createVersionLabel = (scene, version, radius) => {
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    canvas.width = 512;
+    canvas.height = 128;
+    
+    context.fillStyle = 'rgba(10, 10, 10, 0.8)';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    
+    context.font = 'bold 24px Arial';
+    context.fillStyle = '#ffffff';
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.fillText(`v${version.version_number}`, canvas.width / 2, canvas.height / 2 - 15);
+    
+    context.font = '16px Arial';
+    context.fillStyle = '#aaaaaa';
+    context.fillText(version.version_name, canvas.width / 2, canvas.height / 2 + 15);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    const spriteMaterial = new THREE.SpriteMaterial({
+      map: texture,
+      transparent: true,
+      opacity: 0.9
+    });
+    
+    const sprite = new THREE.Sprite(spriteMaterial);
+    const angle = Math.random() * Math.PI * 2;
+    sprite.position.set(
+      Math.cos(angle) * radius,
+      0,
+      Math.sin(angle) * radius
+    );
+    sprite.scale.set(3, 0.75, 1);
+    
+    // Make sprite face camera
+    sprite.lookAt(0, 0, 0);
+    
+    scene.add(sprite);
+    serverObjectsRef.current.push(sprite);
+  };
+
+  const updateParticles = () => {
+    particlesRef.current.forEach(particleSystem => {
+      const positions = particleSystem.geometry.attributes.position.array;
+      const time = Date.now() * 0.0001;
+      
+      for (let i = 0; i < positions.length; i += 3) {
+        positions[i] += Math.sin(time + i) * 0.01;
+        positions[i + 1] += Math.cos(time + i) * 0.01;
+        positions[i + 2] += Math.sin(time + i * 0.5) * 0.01;
+      }
+      
+      particleSystem.geometry.attributes.position.needsUpdate = true;
+    });
+  };
+
+  const updateServerObjects = () => {
+    const time = Date.now() * 0.001;
+    
+    serverObjectsRef.current.forEach(obj => {
+      if (obj.userData?.isFile) {
+        // Animate orbiting files
+        const { angle, radius, height, speed, offset } = obj.userData;
+        const newAngle = angle + time * 0.1 * speed + offset;
+        
+        obj.position.x = Math.cos(newAngle) * radius;
+        obj.position.y = height + Math.sin(time + offset) * 0.5;
+        obj.position.z = Math.sin(newAngle) * radius;
+        
+        // Gentle rotation
+        obj.rotation.x += 0.01;
+        obj.rotation.y += 0.02;
+      }
+    });
+  };
+
+  const enterImmersiveView = () => {
+    if (!currentServer) return;
+    
+    setShowImmersiveView(true);
+    // Initialize Three.js on next tick
+    setTimeout(() => {
+      if (threeContainerRef.current) {
+        initImmersiveView();
+      }
+    }, 100);
+  };
+
+  const exitImmersiveView = () => {
+    setShowImmersiveView(false);
+    
+    // Clean up Three.js
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current);
+      animationRef.current = null;
+    }
+    
+    if (threeRendererRef.current && threeContainerRef.current) {
+      threeContainerRef.current.removeChild(threeRendererRef.current.domElement);
+      threeRendererRef.current.dispose();
+      threeRendererRef.current = null;
+    }
+    
+    threeSceneRef.current = null;
+    threeCameraRef.current = null;
+    threeControlsRef.current = null;
+    serverObjectsRef.current = [];
+    particlesRef.current = [];
   };
 
   const getFeaturedServers = () => {
@@ -121,6 +525,7 @@ export default function ExplorePage() {
     setServerMembers([]);
     setShowCommentForm(false);
     setNewComment('');
+    setShowImmersiveView(false);
     
     try {
       // Load comprehensive server data using the new API
@@ -445,11 +850,10 @@ export default function ExplorePage() {
                 {renderFileTree(item, fullPath)}
               </div>
             )}
-          </div>
-        );
-      }
-    });
-  };
+      </div>
+    );
+  });
+};
 
   const postComment = async () => {
     if (!newComment.trim()) {
@@ -578,6 +982,7 @@ export default function ExplorePage() {
     setShowCommentForm(false);
     setNewComment('');
     setCommentError('');
+    setShowImmersiveView(false);
   };
 
   const logout = () => {
@@ -697,6 +1102,146 @@ export default function ExplorePage() {
           </pre>
         </div>
       </motion.div>
+    </motion.div>
+  );
+
+  const renderImmersiveView = () => (
+    <motion.div 
+      style={styles.immersiveView}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+    >
+      <div style={styles.immersiveHeader}>
+        <motion.button
+          style={styles.backImmersiveButton}
+          onClick={exitImmersiveView}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+        >
+          ← Back to Server View
+        </motion.button>
+        <motion.div 
+          style={styles.immersiveTitle}
+          animate={{ 
+            textShadow: [
+              "0 0 10px #4285f4",
+              "0 0 20px #4285f4", 
+              "0 0 10px #4285f4"
+            ]
+          }}
+          transition={{ duration: 2, repeat: Infinity }}
+        >
+          🚀 {currentServer?.name} - 3D Immersive View
+        </motion.div>
+        <div style={styles.immersiveControls}>
+          <span style={styles.immersiveHint}>
+            🖱️ Drag to rotate • Scroll to zoom
+          </span>
+        </div>
+      </div>
+
+      {immersiveLoading ? (
+        <div style={styles.immersiveLoading}>
+          <motion.div
+            style={styles.immersiveSpinner}
+            animate={{ rotate: 360 }}
+            transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+          >
+            <div style={styles.immersiveSpinnerInner} />
+          </motion.div>
+          <motion.h3
+            style={styles.immersiveLoadingText}
+            animate={{ opacity: [0.5, 1, 0.5] }}
+            transition={{ duration: 2, repeat: Infinity }}
+          >
+            Loading Immersive View...
+          </motion.h3>
+        </div>
+      ) : (
+        <div 
+          ref={threeContainerRef} 
+          style={styles.threeContainer}
+        />
+      )}
+
+      <div style={styles.immersiveInfo}>
+        <div style={styles.immersiveStats}>
+          <motion.div 
+            style={styles.immersiveStat}
+            whileHover={{ scale: 1.05 }}
+          >
+            <div style={styles.immersiveStatIcon}>📁</div>
+            <div style={styles.immersiveStatContent}>
+              <div style={styles.immersiveStatLabel}>Files</div>
+              <div style={styles.immersiveStatValue}>{serverFiles.length}</div>
+            </div>
+          </motion.div>
+          <motion.div 
+            style={styles.immersiveStat}
+            whileHover={{ scale: 1.05 }}
+          >
+            <div style={styles.immersiveStatIcon}>📦</div>
+            <div style={styles.immersiveStatContent}>
+              <div style={styles.immersiveStatLabel}>Versions</div>
+              <div style={styles.immersiveStatValue}>{serverVersions.length}</div>
+            </div>
+          </motion.div>
+          <motion.div 
+            style={styles.immersiveStat}
+            whileHover={{ scale: 1.05 }}
+          >
+            <div style={styles.immersiveStatIcon}>💬</div>
+            <div style={styles.immersiveStatContent}>
+              <div style={styles.immersiveStatLabel}>Comments</div>
+              <div style={styles.immersiveStatValue}>{serverComments.length}</div>
+            </div>
+          </motion.div>
+          <motion.div 
+            style={styles.immersiveStat}
+            whileHover={{ scale: 1.05 }}
+          >
+            <div style={styles.immersiveStatIcon}>📥</div>
+            <div style={styles.immersiveStatContent}>
+              <div style={styles.immersiveStatLabel}>Downloads</div>
+              <div style={styles.immersiveStatValue}>{currentServer?.total_downloads || 0}</div>
+            </div>
+          </motion.div>
+        </div>
+        <div style={styles.immersiveLegend}>
+          <h4 style={styles.legendTitle}>🎨 3D Visualization Legend</h4>
+          <div style={styles.legendItems}>
+            <div style={styles.legendItem}>
+              <div style={{...styles.legendColor, background: '#4285f4'}} />
+              <span style={styles.legendText}>Server Core</span>
+            </div>
+            <div style={styles.legendItem}>
+              <div style={{...styles.legendColor, background: '#ff6b6b'}} />
+              <span style={styles.legendText}>HTML Files</span>
+            </div>
+            <div style={styles.legendItem}>
+              <div style={{...styles.legendColor, background: '#4285f4'}} />
+              <span style={styles.legendText}>JS Files</span>
+            </div>
+            <div style={styles.legendItem}>
+              <div style={{...styles.legendColor, background: '#34a853'}} />
+              <span style={styles.legendText}>CSS Files</span>
+            </div>
+            <div style={styles.legendItem}>
+              <div style={{...styles.legendColor, background: '#fbbc05'}} />
+              <span style={styles.legendText}>Other Files</span>
+            </div>
+            <div style={styles.legendItem}>
+              <div style={{...styles.legendColor, background: '#34a853'}} />
+              <span style={styles.legendText}>Latest Version</span>
+            </div>
+            <div style={styles.legendItem}>
+              <div style={{...styles.legendColor, background: '#8ab4f8'}} />
+              <span style={styles.legendText}>Other Versions</span>
+            </div>
+          </div>
+        </div>
+      </div>
     </motion.div>
   );
 
@@ -918,6 +1463,18 @@ export default function ExplorePage() {
           </div>
 
           <div style={styles.headerRight}>
+            <motion.button
+              style={styles.immersiveToggleButton}
+              onClick={enterImmersiveView}
+              whileHover={{ 
+                scale: 1.05,
+                boxShadow: '0 0 20px rgba(66, 133, 244, 0.5)'
+              }}
+              whileTap={{ scale: 0.95 }}
+            >
+              🚀 Enter 3D Immersive View
+            </motion.button>
+            
             <motion.div 
               style={styles.serverStats}
               initial={{ opacity: 0 }}
@@ -1364,7 +1921,9 @@ export default function ExplorePage() {
 
         <div style={styles.main}>
           <AnimatePresence mode="wait">
-            {selectedServer ? renderServerView() : renderExploreGrid()}
+            {selectedServer ? (
+              showImmersiveView ? renderImmersiveView() : renderServerView()
+            ) : renderExploreGrid()}
           </AnimatePresence>
         </div>
       </div>
@@ -1692,6 +2251,21 @@ const styles = {
     transition: 'all 0.2s ease',
     flexShrink: 0
   },
+  immersiveToggleButton: {
+    background: 'linear-gradient(90deg, #4285f4, #34a853)',
+    color: 'white',
+    border: 'none',
+    padding: '12px 24px',
+    borderRadius: '25px',
+    cursor: 'pointer',
+    fontWeight: '700',
+    fontSize: '14px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    transition: 'all 0.3s ease',
+    boxShadow: '0 0 15px rgba(66, 133, 244, 0.3)'
+  },
   serverInfo: {
     flex: 1
   },
@@ -1935,6 +2509,184 @@ const styles = {
     fontSize: '10px',
     marginLeft: 'auto',
     transition: 'transform 0.2s ease'
+  },
+  // Immersive View Styles
+  immersiveView: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    background: 'linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%)',
+    zIndex: 1000,
+    display: 'flex',
+    flexDirection: 'column'
+  },
+  immersiveHeader: {
+    background: 'rgba(10, 10, 10, 0.95)',
+    backdropFilter: 'blur(10px)',
+    padding: '20px 40px',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderBottom: '1px solid rgba(66, 133, 244, 0.2)',
+    zIndex: 1001
+  },
+  backImmersiveButton: {
+    background: 'rgba(66, 133, 244, 0.15)',
+    color: '#8ab4f8',
+    border: '2px solid rgba(66, 133, 244, 0.3)',
+    padding: '12px 24px',
+    borderRadius: '25px',
+    cursor: 'pointer',
+    fontWeight: '600',
+    fontSize: '14px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    transition: 'all 0.2s ease'
+  },
+  immersiveTitle: {
+    fontSize: '24px',
+    fontWeight: '700',
+    color: '#fff',
+    textAlign: 'center',
+    flex: 1
+  },
+  immersiveControls: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '15px'
+  },
+  immersiveHint: {
+    color: '#aaa',
+    fontSize: '14px',
+    fontWeight: '500'
+  },
+  immersiveLoading: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'center',
+    alignItems: 'center',
+    background: 'rgba(0, 0, 0, 0.5)'
+  },
+  immersiveSpinner: {
+    width: '80px',
+    height: '80px',
+    border: '6px solid transparent',
+    borderTop: '6px solid #4285f4',
+    borderRight: '6px solid #ea4335',
+    borderBottom: '6px solid #fbbc05',
+    borderLeft: '6px solid #34a853',
+    borderRadius: '50%',
+    marginBottom: '30px'
+  },
+  immersiveSpinnerInner: {
+    width: '100%',
+    height: '100%',
+    borderRadius: '50%'
+  },
+  immersiveLoadingText: {
+    color: '#fff',
+    fontSize: '20px',
+    fontWeight: '600'
+  },
+  threeContainer: {
+    flex: 1,
+    width: '100%',
+    position: 'relative',
+    overflow: 'hidden'
+  },
+  immersiveInfo: {
+    background: 'rgba(10, 10, 10, 0.95)',
+    backdropFilter: 'blur(10px)',
+    padding: '20px 40px',
+    borderTop: '1px solid rgba(66, 133, 244, 0.2)',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: '40px'
+  },
+  immersiveStats: {
+    display: 'flex',
+    gap: '20px',
+    flex: 1
+  },
+  immersiveStat: {
+    background: 'rgba(255, 255, 255, 0.05)',
+    border: '1px solid rgba(66, 133, 244, 0.2)',
+    borderRadius: '15px',
+    padding: '15px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '15px',
+    minWidth: '120px',
+    cursor: 'pointer',
+    transition: 'all 0.3s ease'
+  },
+  immersiveStatIcon: {
+    fontSize: '24px',
+    width: '40px',
+    height: '40px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    background: 'rgba(66, 133, 244, 0.1)',
+    borderRadius: '10px'
+  },
+  immersiveStatContent: {
+    display: 'flex',
+    flexDirection: 'column'
+  },
+  immersiveStatLabel: {
+    color: '#aaa',
+    fontSize: '12px',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px'
+  },
+  immersiveStatValue: {
+    color: '#fff',
+    fontSize: '20px',
+    fontWeight: '700'
+  },
+  immersiveLegend: {
+    background: 'rgba(255, 255, 255, 0.03)',
+    border: '1px solid rgba(66, 133, 244, 0.1)',
+    borderRadius: '15px',
+    padding: '20px',
+    minWidth: '300px'
+  },
+  legendTitle: {
+    color: '#fff',
+    fontSize: '16px',
+    fontWeight: '600',
+    marginBottom: '15px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px'
+  },
+  legendItems: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px'
+  },
+  legendItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px'
+  },
+  legendColor: {
+    width: '20px',
+    height: '20px',
+    borderRadius: '4px',
+    border: '2px solid rgba(255, 255, 255, 0.2)'
+  },
+  legendText: {
+    color: '#ccc',
+    fontSize: '14px',
+    fontWeight: '500'
   },
   // Versions Section
   versionsSection: {
