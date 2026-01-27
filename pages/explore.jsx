@@ -852,8 +852,8 @@ export default function ExplorePage() {
             )}
       </div>
     );
-  });
 };
+
 
   const postComment = async () => {
     if (!newComment.trim()) {
