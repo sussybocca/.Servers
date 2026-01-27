@@ -34,12 +34,10 @@ export default function EditorPage() {
   const [newVersionNumber, setNewVersionNumber] = useState('');
   const [versionDescription, setVersionDescription] = useState('');
   const [versionChangelog, setVersionChangelog] = useState('');
-  const [isPrerelease, setIsPrerelease] = useState(false);
   const [releaseNotes, setReleaseNotes] = useState('');
   const [userServers, setUserServers] = useState([]);
   const [showServerSelection, setShowServerSelection] = useState(false);
   const [versions, setVersions] = useState([]);
-  const [showVersionModal, setShowVersionModal] = useState(false);
 
   // Get current user on component mount
   useEffect(() => {
@@ -65,8 +63,7 @@ export default function EditorPage() {
     if (path.includes('/editor/')) {
       const serverId = path.split('/editor/')[1];
       setCurrentServerId(serverId);
-      loadServerFiles(serverId);
-      loadServerVersions(serverId);
+      loadServerData(serverId);
     }
   }, []);
 
@@ -82,28 +79,30 @@ export default function EditorPage() {
     }
   };
 
-  const loadServerFiles = async (serverId) => {
+  const loadServerData = async (serverId) => {
     try {
-      const response = await fetch(`/api/update-file?serverId=${serverId}&fileType=file&includeContent=true`);
-      const data = await response.json();
-      if (data.success) {
-        setFiles(data.files || []);
-        setFolders([]); // Reset folders for now
+      // Load server info and versions
+      const serverRes = await fetch(`/api/get-server?serverId=${serverId}&includeVersions=true`);
+      const serverData = await serverRes.json();
+      
+      if (serverData.success) {
+        setServerName(serverData.server.name);
+        setDescription(serverData.server.description || '');
+        setIsPublic(serverData.server.is_public);
+        setVersions(serverData.versions || []);
+        
+        // If there are versions, load the latest one
+        if (serverData.versions && serverData.versions.length > 0) {
+          const latestVersion = serverData.versions[0];
+          setCurrentVersionId(latestVersion.id);
+          loadVersionFiles(latestVersion.id);
+        } else {
+          setMessage('No versions found. Create a version first.');
+        }
       }
     } catch (error) {
-      console.error('Failed to load files:', error);
-    }
-  };
-
-  const loadServerVersions = async (serverId) => {
-    try {
-      const response = await fetch(`/api/get-server?serverId=${serverId}&includeVersions=true`);
-      const data = await response.json();
-      if (data.success) {
-        setVersions(data.versions || []);
-      }
-    } catch (error) {
-      console.error('Failed to load versions:', error);
+      console.error('Failed to load server data:', error);
+      setMessage('Failed to load server: ' + error.message);
     }
   };
 
@@ -113,13 +112,17 @@ export default function EditorPage() {
       const data = await response.json();
       if (data.success) {
         setFiles(data.files || []);
-        setFolders([]);
+        setFolders([]); // Reset folders for now
         // Clear selected file when loading new version
         setSelectedFile(null);
         setFileContent('');
+        setMessage(`Loaded ${data.files?.length || 0} files`);
+      } else {
+        setMessage(data.error || 'Failed to load files');
       }
     } catch (error) {
       console.error('Failed to load version files:', error);
+      setMessage('Error loading files: ' + error.message);
     }
   };
 
@@ -160,82 +163,193 @@ export default function EditorPage() {
         // Load the newly created server
         fetchUserServers(currentUser.id);
         
-        // Initialize with default files in a new version
-        createInitialVersion(data.server.id);
+        // Create initial version with default files
+        await createInitialVersion(data.server.id);
       } else {
         setMessage(data.error || 'Failed to create server');
-        console.error('API Error:', data);
       }
     } catch (error) {
       setMessage('Network error: ' + error.message);
-      console.error('Network Error:', error);
     } finally {
       setLoading(false);
     }
   };
 
   const createInitialVersion = async (serverId) => {
-    const defaultFiles = [
-      { path: '/index.html', content: '<!DOCTYPE html>\n<html>\n<head>\n  <title>My Server</title>\n  <link rel="stylesheet" href="style.css">\n</head>\n<body>\n  <h1>Welcome to My Server!</h1>\n  <p>Edit this file to customize your server.</p>\n  <script src="script.js"></script>\n</body>\n</html>' },
-      { path: '/style.css', content: 'body {\n  font-family: Arial, sans-serif;\n  max-width: 800px;\n  margin: 0 auto;\n  padding: 20px;\n  line-height: 1.6;\n}\n\nh1 {\n  color: #4285f4;\n}' },
-      { path: '/script.js', content: 'console.log("Server is running!");\n\n// Your JavaScript code here\ndocument.addEventListener("DOMContentLoaded", function() {\n  console.log("Page loaded");\n});' }
-    ];
+    try {
+      // Create a version using update-file API with PATCH method
+      const versionResponse = await fetch('/api/update-file', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create_version',
+          serverId: serverId,
+          version_name: 'Initial Version',
+          version_number: 'v1.0.0',
+          description: 'Initial server files',
+          changelog: 'Created initial server files',
+          is_prerelease: false
+        })
+      });
 
-    // First create a version
-    const versionResponse = await fetch('/api/update-file', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'create_version',
-        serverId: serverId,
-        version_name: 'Initial Version',
-        version_number: 'v1.0.0',
-        description: 'Initial server files',
-        changelog: 'Created initial server files'
-      })
-    });
-
-    const versionData = await versionResponse.json();
-    
-    if (versionData.success) {
-      setCurrentVersionId(versionData.version.id);
+      const versionData = await versionResponse.json();
       
-      // Save each file to the version
-      for (const file of defaultFiles) {
-        await saveFile(file.path, file.content);
+      if (versionData.success) {
+        setCurrentVersionId(versionData.version.id);
+        
+        // Create default files
+        const defaultFiles = [
+          { 
+            path: '/index.html', 
+            content: '<!DOCTYPE html>\n<html>\n<head>\n  <title>My Server</title>\n  <link rel="stylesheet" href="style.css">\n</head>\n<body>\n  <h1>Welcome to My Server!</h1>\n  <p>Edit this file to customize your server.</p>\n  <script src="script.js"></script>\n</body>\n</html>' 
+          },
+          { 
+            path: '/style.css', 
+            content: 'body {\n  font-family: Arial, sans-serif;\n  max-width: 800px;\n  margin: 0 auto;\n  padding: 20px;\n  line-height: 1.6;\n}\n\nh1 {\n  color: #4285f4;\n}' 
+          },
+          { 
+            path: '/script.js', 
+            content: 'console.log("Server is running!");\n\n// Your JavaScript code here\ndocument.addEventListener("DOMContentLoaded", function() {\n  console.log("Page loaded");\n});' 
+          }
+        ];
+
+        // Save each file using save-file API (which you provided)
+        for (const file of defaultFiles) {
+          await saveFile(file.path, file.content);
+        }
+        
+        // Set files in state
+        setFiles(defaultFiles);
+        if (defaultFiles.length > 0) {
+          setSelectedFile(defaultFiles[0]);
+          setFileContent(defaultFiles[0].content);
+        }
+        
+        // Load versions list
+        loadServerData(serverId);
+      } else {
+        setMessage(versionData.error || 'Failed to create initial version');
       }
-      
-      setFiles(defaultFiles);
-      setSelectedFile(defaultFiles[0]);
-      setFileContent(defaultFiles[0].content);
-      
-      // Load versions for this server
-      loadServerVersions(serverId);
+    } catch (error) {
+      setMessage('Error creating initial version: ' + error.message);
     }
   };
 
+  // Save file using save-file API
   const saveFile = async (path, content) => {
     if (!currentServerId || !currentVersionId) {
-      setMessage('No active version. Please create or select a version first.');
-      return { success: false };
+      return { 
+        success: false, 
+        error: 'No active version. Please create or select a version first.' 
+      };
     }
     
     try {
-      const response = await fetch('/api/update-file', {
+      const response = await fetch('/api/save-file', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           serverId: currentServerId,
-          path,
-          content,
           version_id: currentVersionId,
-          fileType: 'version'
+          path: path,
+          content: content || ''
         })
       });
-      return await response.json();
+      
+      const data = await response.json();
+      console.log('Save file response:', data);
+      return data;
     } catch (error) {
       console.error('Failed to save file:', error);
       return { success: false, error: error.message };
+    }
+  };
+
+  const createNewFile = async () => {
+    if (!newFileName.trim()) {
+      setMessage('Please enter a file name');
+      return;
+    }
+
+    if (!currentVersionId) {
+      setMessage('Please create or select a version first');
+      setIsCreatingFile(false);
+      return;
+    }
+
+    // Validate and format filename
+    let finalFileName = newFileName.trim();
+    
+    // Add .js extension if no extension provided
+    if (!finalFileName.includes('.')) {
+      finalFileName = finalFileName + '.js';
+    }
+    
+    // Validate file extension
+    const extension = finalFileName.split('.').pop().toLowerCase();
+    const validExtensions = ['js', 'jsx', 'ts', 'tsx', 'html', 'css', 'json', 'md'];
+    
+    if (!validExtensions.includes(extension)) {
+      setMessage(`Invalid file extension .${extension}. Allowed: ${validExtensions.join(', ')}`);
+      return;
+    }
+    
+    const path = currentPath === '/' ? `/${finalFileName}` : `${currentPath}/${finalFileName}`;
+    
+    try {
+      const result = await saveFile(path, '');
+      if (result.success) {
+        // Create new file object
+        const newFile = { 
+          path, 
+          content: ''
+        };
+        
+        setFiles([...files, newFile]);
+        setSelectedFile(newFile);
+        setFileContent('');
+        setIsCreatingFile(false);
+        setNewFileName('');
+        setMessage(`File "${finalFileName}" created successfully`);
+      } else {
+        setMessage(result.error || 'Failed to create file');
+      }
+    } catch (error) {
+      console.error('Error creating file:', error);
+      setMessage('Error creating file: ' + error.message);
+    }
+  };
+
+  const createNewFolder = async () => {
+    if (!newFolderName.trim()) {
+      setMessage('Please enter a folder name');
+      return;
+    }
+    
+    const folderPath = currentPath === '/' ? `/${newFolderName}` : `${currentPath}/${newFolderName}`;
+    
+    try {
+      const response = await fetch('/api/create-folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          serverId: currentServerId,
+          path: folderPath
+        })
+      });
+      
+      const data = await response.json();
+      if (data.success) {
+        setFolders([...folders, { path: folderPath }]);
+        setIsCreatingFolder(false);
+        setNewFolderName('');
+        setMessage(`Folder "${newFolderName}" created successfully`);
+      } else {
+        setMessage(data.error || 'Failed to create folder');
+      }
+    } catch (error) {
+      console.error('Failed to create folder:', error);
+      setMessage('Error creating folder: ' + error.message);
     }
   };
 
@@ -256,7 +370,7 @@ export default function EditorPage() {
           version_number: newVersionNumber || `v${Date.now()}`,
           description: versionDescription || `Version: ${newVersionName}`,
           changelog: versionChangelog || 'Created new version',
-          is_prerelease: isPrerelease
+          is_prerelease: false
         })
       });
 
@@ -271,18 +385,13 @@ export default function EditorPage() {
         setVersionChangelog('');
         setIsCreatingVersion(false);
         
-        // Copy current files to new version
-        if (files.length > 0) {
-          for (const file of files) {
-            await saveFile(file.path, file.content || '');
-          }
-        } else {
-          // Initialize with default files
-          await createInitialVersion(currentServerId);
-        }
+        // Start with empty files for new version
+        setFiles([]);
+        setSelectedFile(null);
+        setFileContent('');
         
         // Load updated versions list
-        loadServerVersions(currentServerId);
+        loadServerData(currentServerId);
       } else {
         setMessage(data.error || 'Failed to create version');
       }
@@ -314,7 +423,7 @@ export default function EditorPage() {
         setMessage('Version published successfully!');
         setReleaseNotes('');
         // Update versions list
-        loadServerVersions(currentServerId);
+        loadServerData(currentServerId);
       } else {
         setMessage(data.error || 'Failed to publish version');
       }
@@ -325,55 +434,16 @@ export default function EditorPage() {
     }
   };
 
-  const createNewFile = async () => {
-    if (!newFileName.trim()) return;
-    
-    const path = currentPath === '/' ? `/${newFileName}` : `${currentPath}/${newFileName}`;
-    const newFile = { path, content: '' };
-    
-    const result = await saveFile(path, '');
-    if (result.success) {
-      setFiles([...files, newFile]);
-      setSelectedFile(newFile);
-      setFileContent('');
-      setIsCreatingFile(false);
-      setNewFileName('');
-    }
-  };
-
-  const createNewFolder = async () => {
-    if (!newFolderName.trim()) return;
-    
-    const folderPath = currentPath === '/' ? `/${newFolderName}` : `${currentPath}/${newFolderName}`;
-    
-    try {
-      const response = await fetch('/api/create-folder', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          serverId: currentServerId,
-          path: folderPath
-        })
-      });
-      
-      const data = await response.json();
-      if (data.success) {
-        setFolders([...folders, { path: folderPath }]);
-        setIsCreatingFolder(false);
-        setNewFolderName('');
-      }
-    } catch (error) {
-      console.error('Failed to create folder:', error);
-    }
-  };
-
   const handleFileSelect = (file) => {
     setSelectedFile(file);
     setFileContent(file.content || '');
   };
 
   const handleSaveFile = async () => {
-    if (!selectedFile) return;
+    if (!selectedFile) {
+      setMessage('No file selected to save');
+      return;
+    }
     
     const result = await saveFile(selectedFile.path, fileContent);
     if (result.success) {
@@ -382,18 +452,19 @@ export default function EditorPage() {
       setFiles(files.map(f => 
         f.path === selectedFile.path ? { ...f, content: fileContent } : f
       ));
+    } else {
+      setMessage(result.error || 'Failed to save file');
     }
   };
 
   const handleSelectServer = (server) => {
     setCurrentServerId(server.id);
     setServerName(server.name);
-    setDescription(server.description);
+    setDescription(server.description || '');
     setIsPublic(server.is_public);
     setShowServerSelection(false);
     window.history.pushState({}, '', `/editor/${server.id}`);
-    loadServerFiles(server.id);
-    loadServerVersions(server.id);
+    loadServerData(server.id);
   };
 
   const handleSelectVersion = (version) => {
@@ -404,7 +475,7 @@ export default function EditorPage() {
 
   const getFileLanguage = (filename) => {
     if (filename.endsWith('.js')) return 'javascript';
-    if (filename.endsWith('.jsx')) return 'javascript'; // JSX uses JavaScript language
+    if (filename.endsWith('.jsx')) return 'javascript';
     if (filename.endsWith('.ts')) return 'typescript';
     if (filename.endsWith('.tsx')) return 'typescript';
     if (filename.endsWith('.html')) return 'html';
@@ -473,7 +544,7 @@ export default function EditorPage() {
                 </button>
                 <button 
                   style={styles.publishButton}
-                  onClick={() => setShowVersionModal(true)}
+                  onClick={() => setShowServerSelection(false) || publishCurrentVersion()}
                   disabled={publishing}
                 >
                   {publishing ? 'Publishing...' : '📤 Publish'}
@@ -587,17 +658,6 @@ export default function EditorPage() {
                     rows={4}
                   />
                 </div>
-                <div style={styles.formGroup}>
-                  <label style={styles.checkboxLabel}>
-                    <input
-                      type="checkbox"
-                      checked={isPrerelease}
-                      onChange={(e) => setIsPrerelease(e.target.checked)}
-                      style={styles.checkbox}
-                    />
-                    Mark as pre-release
-                  </label>
-                </div>
                 <div style={styles.modalActions}>
                   <button onClick={createNewVersion} style={styles.confirmButton}>
                     Create Version
@@ -606,98 +666,6 @@ export default function EditorPage() {
                     Cancel
                   </button>
                 </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Publish Version Modal */}
-        {showVersionModal && (
-          <div style={styles.modalOverlay}>
-            <div style={styles.modalContent}>
-              <div style={styles.modalHeader}>
-                <h3>Publish Version</h3>
-                <button onClick={() => setShowVersionModal(false)} style={styles.closeButton}>×</button>
-              </div>
-              <div style={styles.versionForm}>
-                <div style={styles.versionsList}>
-                  <h4>Available Versions</h4>
-                  {versions.length === 0 ? (
-                    <div style={styles.noVersions}>No versions created yet</div>
-                  ) : (
-                    versions.map(version => (
-                      <div 
-                        key={version.id}
-                        style={styles.versionItem}
-                      >
-                        <div style={styles.versionHeader}>
-                          <strong>{version.version_name}</strong>
-                          <span style={styles.versionNumber}>{version.version_number}</span>
-                        </div>
-                        <div style={styles.versionDetails}>
-                          {version.description}
-                          <div style={styles.versionStatus}>
-                            {version.is_released ? (
-                              <span style={styles.releasedBadge}>✅ Published</span>
-                            ) : (
-                              <span style={styles.draftBadge}>📝 Draft</span>
-                            )}
-                            {version.is_prerelease && (
-                              <span style={styles.prereleaseBadge}>🚧 Pre-release</span>
-                            )}
-                          </div>
-                        </div>
-                        <div style={styles.versionActions}>
-                          {!version.is_released && (
-                            <button
-                              onClick={() => {
-                                setCurrentVersionId(version.id);
-                                loadVersionFiles(version.id);
-                                setShowVersionModal(false);
-                              }}
-                              style={styles.selectVersionButton}
-                            >
-                              Select & Edit
-                            </button>
-                          )}
-                          {version.is_released && (
-                            <button
-                              onClick={() => handleSelectVersion(version)}
-                              style={styles.viewVersionButton}
-                            >
-                              View Files
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-                
-                {!currentVersionId ? (
-                  <div style={styles.warningMessage}>
-                    Please select or create a version first
-                  </div>
-                ) : (
-                  <div style={styles.releaseNotes}>
-                    <h4>Release Notes</h4>
-                    <textarea
-                      value={releaseNotes}
-                      onChange={(e) => setReleaseNotes(e.target.value)}
-                      placeholder="What's new in this release..."
-                      style={styles.modalTextarea}
-                      rows={4}
-                    />
-                    <div style={styles.modalActions}>
-                      <button onClick={publishCurrentVersion} style={styles.publishConfirmButton}>
-                        📤 Publish Current Version
-                      </button>
-                      <button onClick={() => setShowVersionModal(false)} style={styles.cancelButton}>
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
           </div>
@@ -1202,13 +1170,6 @@ const styles = {
     fontFamily: 'inherit',
     resize: 'vertical'
   },
-  checkboxLabel: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    color: '#ccc',
-    fontSize: 14
-  },
   modalActions: {
     display: 'flex',
     gap: 10,
@@ -1224,18 +1185,6 @@ const styles = {
     cursor: 'pointer',
     fontSize: 14
   },
-  publishConfirmButton: {
-    backgroundColor: '#34a853',
-    color: 'white',
-    border: 'none',
-    padding: '10px 20px',
-    borderRadius: 4,
-    cursor: 'pointer',
-    fontSize: 14,
-    display: 'flex',
-    alignItems: 'center',
-    gap: 5
-  },
   cancelButton: {
     backgroundColor: '#666',
     color: 'white',
@@ -1244,99 +1193,6 @@ const styles = {
     borderRadius: 4,
     cursor: 'pointer',
     fontSize: 14
-  },
-  versionsList: {
-    marginBottom: 20
-  },
-  versionItem: {
-    backgroundColor: '#2d2d30',
-    padding: '15px',
-    borderRadius: 4,
-    marginBottom: 10,
-    border: '1px solid #3c3c3c'
-  },
-  versionHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10
-  },
-  versionNumber: {
-    backgroundColor: '#555',
-    color: '#fff',
-    padding: '2px 8px',
-    borderRadius: 12,
-    fontSize: 12
-  },
-  versionDetails: {
-    color: '#aaa',
-    fontSize: 14,
-    marginBottom: 10
-  },
-  versionStatus: {
-    display: 'flex',
-    gap: 10,
-    marginTop: 10
-  },
-  releasedBadge: {
-    backgroundColor: '#1e4620',
-    color: '#4caf50',
-    padding: '2px 8px',
-    borderRadius: 4,
-    fontSize: 12
-  },
-  draftBadge: {
-    backgroundColor: '#2d3748',
-    color: '#90caf9',
-    padding: '2px 8px',
-    borderRadius: 4,
-    fontSize: 12
-  },
-  prereleaseBadge: {
-    backgroundColor: '#4a235a',
-    color: '#e1bee7',
-    padding: '2px 8px',
-    borderRadius: 4,
-    fontSize: 12
-  },
-  versionActions: {
-    display: 'flex',
-    gap: 10,
-    justifyContent: 'flex-end'
-  },
-  selectVersionButton: {
-    backgroundColor: '#4285f4',
-    color: 'white',
-    border: 'none',
-    padding: '6px 12px',
-    borderRadius: 4,
-    cursor: 'pointer',
-    fontSize: 12
-  },
-  viewVersionButton: {
-    backgroundColor: '#666',
-    color: 'white',
-    border: 'none',
-    padding: '6px 12px',
-    borderRadius: 4,
-    cursor: 'pointer',
-    fontSize: 12
-  },
-  noVersions: {
-    textAlign: 'center',
-    padding: '20px',
-    color: '#888'
-  },
-  warningMessage: {
-    backgroundColor: '#4a235a',
-    color: '#e1bee7',
-    padding: '10px',
-    borderRadius: 4,
-    textAlign: 'center',
-    marginBottom: 20
-  },
-  releaseNotes: {
-    marginTop: 20
   },
   main: {
     padding: 20,
