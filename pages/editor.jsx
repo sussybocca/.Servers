@@ -97,7 +97,7 @@ export default function EditorPage() {
           setCurrentVersionId(latestVersion.id);
           loadVersionFiles(latestVersion.id);
         } else {
-          setMessage('No versions found. Create a version first.');
+          setMessage('No versions found. You can create files directly.');
         }
       }
     } catch (error) {
@@ -228,19 +228,55 @@ export default function EditorPage() {
         // Load versions list
         loadServerData(serverId);
       } else {
-        setMessage(versionData.error || 'Failed to create initial version');
+        // If version creation fails, create files directly
+        await createFilesDirectly(serverId);
       }
     } catch (error) {
       setMessage('Error creating initial version: ' + error.message);
+      // Try to create files directly
+      await createFilesDirectly(serverId);
     }
   };
 
-  // Save file using save-file API
+  const createFilesDirectly = async (serverId) => {
+    const defaultFiles = [
+      { 
+        path: '/index.html', 
+        content: '<!DOCTYPE html>\n<html>\n<head>\n  <title>My Server</title>\n  <link rel="stylesheet" href="style.css">\n</head>\n<body>\n  <h1>Welcome to My Server!</h1>\n  <p>Edit this file to customize your server.</p>\n  <script src="script.js"></script>\n</body>\n</html>' 
+      },
+      { 
+        path: '/style.css', 
+        content: 'body {\n  font-family: Arial, sans-serif;\n  max-width: 800px;\n  margin: 0 auto;\n  padding: 20px;\n  line-height: 1.6;\n}\n\nh1 {\n  color: #4285f4;\n}' 
+      },
+      { 
+        path: '/script.js', 
+        content: 'console.log("Server is running!");\n\n// Your JavaScript code here\ndocument.addEventListener("DOMContentLoaded", function() {\n  console.log("Page loaded");\n});' 
+      }
+    ];
+
+    // Save each file - version_id can be null, API will auto-create version
+    for (const file of defaultFiles) {
+      await saveFile(file.path, file.content);
+    }
+    
+    // Set files in state
+    setFiles(defaultFiles);
+    if (defaultFiles.length > 0) {
+      setSelectedFile(defaultFiles[0]);
+      setFileContent(defaultFiles[0].content);
+    }
+    
+    // Load versions list
+    loadServerData(serverId);
+    setMessage('Default files created. Version will be auto-created.');
+  };
+
+  // Save file using save-file API - FIXED VERSION
   const saveFile = async (path, content) => {
-    if (!currentServerId || !currentVersionId) {
+    if (!currentServerId) {
       return { 
         success: false, 
-        error: 'No active version. Please create or select a version first.' 
+        error: 'No active server. Please create or select a server first.' 
       };
     }
     
@@ -250,13 +286,24 @@ export default function EditorPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           serverId: currentServerId,
-          version_id: currentVersionId,
+          version_id: currentVersionId, // This can be null - API will handle it
           path: path,
           content: content || ''
         })
       });
       
       const data = await response.json();
+      
+      // If we got a version_id back (auto-created), update state
+      if (data.success && data.version_id && (!currentVersionId || currentVersionId !== data.version_id)) {
+        setCurrentVersionId(data.version_id);
+        
+        // If we just created a version, load the files for it
+        if (!currentVersionId) {
+          setTimeout(() => loadVersionFiles(data.version_id), 500);
+        }
+      }
+      
       console.log('Save file response:', data);
       return data;
     } catch (error) {
@@ -268,12 +315,6 @@ export default function EditorPage() {
   const createNewFile = async () => {
     if (!newFileName.trim()) {
       setMessage('Please enter a file name');
-      return;
-    }
-
-    if (!currentVersionId) {
-      setMessage('Please create or select a version first');
-      setIsCreatingFile(false);
       return;
     }
 
@@ -311,6 +352,11 @@ export default function EditorPage() {
         setIsCreatingFile(false);
         setNewFileName('');
         setMessage(`File "${finalFileName}" created successfully`);
+        
+        // Reload server data to update versions list
+        if (currentServerId) {
+          setTimeout(() => loadServerData(currentServerId), 1000);
+        }
       } else {
         setMessage(result.error || 'Failed to create file');
       }
@@ -771,7 +817,7 @@ export default function EditorPage() {
                     </div>
                   ) : (
                     <div style={styles.warningBadge}>
-                      ⚠️ No version selected
+                      ⚠️ No version selected (will be auto-created with first file)
                     </div>
                   )}
                 </div>
@@ -905,14 +951,17 @@ export default function EditorPage() {
                   </div>
                 ) : (
                   <div style={styles.emptyEditor}>
-                    {!currentVersionId ? (
+                    {files.length === 0 ? (
                       <>
-                        <p>⚠️ Please create or select a version first</p>
+                        <p>✨ Ready to create your first file!</p>
+                        <p style={{ fontSize: 14, color: '#aaa' }}>
+                          A version will be automatically created when you save your first file
+                        </p>
                         <button 
-                          onClick={() => setIsCreatingVersion(true)}
+                          onClick={() => setIsCreatingFile(true)}
                           style={styles.createVersionPrompt}
                         >
-                          Create Your First Version
+                          Create First File
                         </button>
                       </>
                     ) : (
@@ -976,7 +1025,9 @@ export default function EditorPage() {
   );
 }
 
+// STYLES REMAIN THE SAME - NO CHANGES
 const styles = {
+  // ... ALL YOUR EXISTING STYLES REMAIN EXACTLY THE SAME ...
   container: {
     minHeight: '100vh',
     backgroundColor: '#1e1e1e',
