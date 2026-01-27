@@ -76,21 +76,8 @@ export default async function handler(req, res) {
       .from('servers')
       .select(`
         *,
-        owner:users!owner_id(id, username, avatar_url, email, online),
-        leader:users!leader_id(id, username, avatar_url),
-        members:server_members(count),
-        latest_version:server_versions!server_id(
-          id,
-          version_name,
-          version_number,
-          description,
-          is_released,
-          release_date,
-          download_count,
-          created_at
-          order_by(release_date desc nulls last, created_at desc) 
-          limit 1
-        )
+        owner:users!servers_owner_id_fkey(id, username, avatar_url, email, online),
+        members:server_members(count)
       `);
 
     // Apply visibility filter
@@ -99,16 +86,37 @@ export default async function handler(req, res) {
       query = query.eq('is_public', true);
     } else if (userId) {
       // For logged-in users, show their servers plus public servers
-      const { data: userMemberships } = await supabase
+      // First, get user's member servers
+      const { data: userMemberships, error: memberError } = await supabase
         .from('server_members')
         .select('server_id')
         .eq('user_id', userId)
         .eq('is_banned', false);
 
+      if (memberError) {
+        console.error('Error fetching memberships:', memberError);
+      }
+
       const userServerIds = userMemberships?.map(m => m.server_id) || [];
       
-      // Build OR condition: user's servers OR public servers
-      query = query.or(`owner_id.eq.${userId},is_public.eq.true${userServerIds.length > 0 ? `,id.in.(${userServerIds.join(',')})` : ''}`);
+      // Build conditions for user's servers
+      let conditions = [];
+      
+      // User's owned servers
+      conditions.push(`owner_id.eq.${userId}`);
+      
+      // Public servers
+      conditions.push(`is_public.eq.true`);
+      
+      // Servers user is a member of
+      if (userServerIds.length > 0) {
+        conditions.push(`id.in.(${userServerIds.join(',')})`);
+      }
+      
+      // Join conditions with OR
+      if (conditions.length > 0) {
+        query = query.or(conditions.join(','));
+      }
     }
 
     // Apply filters
@@ -129,26 +137,24 @@ export default async function handler(req, res) {
     }
 
     // Apply sorting
-    const validSortFields = ['created_at', 'updated_at', 'name', 'views', 'member_count'];
+    const validSortFields = ['created_at', 'updated_at', 'name'];
     const sortField = validSortFields.includes(sortBy) ? sortBy : 'created_at';
     const sortDirection = sortOrder === 'asc' ? 'asc' : 'desc';
     
-    if (sortField === 'member_count') {
-      // For member_count, we need to join with server_members
-      query = query.order('member_count', { ascending: sortDirection === 'asc' });
-    } else {
-      query = query.order(sortField, { ascending: sortDirection === 'asc' });
-    }
+    query = query.order(sortField, { ascending: sortDirection === 'asc' });
 
     // Apply pagination
     query = query.range(offset, offset + limitNum - 1);
 
     // Execute the query
-    const { data: servers, error, count } = await query;
+    const { data: servers, error } = await query;
 
     if (error) {
       console.error('Database error:', error);
-      throw error;
+      return res.status(500).json({ 
+        success: false, 
+        error: 'Failed to fetch servers: ' + error.message 
+      });
     }
 
     // Get total count for pagination metadata
@@ -177,6 +183,30 @@ export default async function handler(req, res) {
       servers.map(async (server) => {
         const enriched = { ...server };
         
+        // Get latest version info
+        try {
+          const { data: latestVersion } = await supabase
+            .from('server_versions')
+            .select(`
+              id,
+              version_name,
+              version_number,
+              description,
+              is_released,
+              release_date,
+              download_count,
+              created_at
+            `)
+            .eq('server_id', server.id)
+            .order('release_date', { ascending: false })
+            .limit(1)
+            .single();
+
+          enriched.latest_version = latestVersion || null;
+        } catch (error) {
+          enriched.latest_version = null;
+        }
+
         // Get version info if requested
         if (includeVersions === 'true') {
           let versionsQuery = supabase
@@ -189,7 +219,9 @@ export default async function handler(req, res) {
               is_released,
               release_date,
               download_count,
-              created_at
+              created_at,
+              created_by,
+              creator:users!server_versions_created_by_fkey(id, username, avatar_url)
             `)
             .eq('server_id', server.id)
             .order('created_at', { ascending: false });
@@ -214,7 +246,7 @@ export default async function handler(req, res) {
               id,
               role,
               joined_at,
-              user:users(id, username, avatar_url, online)
+              user:users!server_members_user_id_fkey(id, username, avatar_url, online)
             `)
             .eq('server_id', server.id)
             .eq('is_banned', false)
@@ -235,31 +267,26 @@ export default async function handler(req, res) {
 
         // Get basic stats if requested
         if (includeStats === 'true') {
-          // Get today's date for daily stats
-          const today = new Date().toISOString().split('T')[0];
-          
-          // Get today's downloads
-          const { data: todayStats } = await supabase
-            .from('server_stats')
-            .select('id')
-            .eq('server_id', server.id)
-            .eq('action', 'download')
-            .gte('created_at', today);
+          try {
+            // Get total downloads from versions table
+            const { data: versionDownloads } = await supabase
+              .from('server_versions')
+              .select('download_count')
+              .eq('server_id', server.id)
+              .eq('is_released', true);
 
-          // Get total downloads from versions table
-          const { data: versionDownloads } = await supabase
-            .from('server_versions')
-            .select('download_count')
-            .eq('server_id', server.id)
-            .eq('is_released', true);
-
-          const totalDownloads = versionDownloads?.reduce((sum, v) => sum + (v.download_count || 0), 0) || 0;
-          
-          enriched.stats = {
-            downloads_today: todayStats?.length || 0,
-            total_downloads: totalDownloads,
-            has_downloads: totalDownloads > 0
-          };
+            const totalDownloads = versionDownloads?.reduce((sum, v) => sum + (v.download_count || 0), 0) || 0;
+            
+            enriched.stats = {
+              total_downloads: totalDownloads,
+              has_downloads: totalDownloads > 0
+            };
+          } catch (error) {
+            enriched.stats = {
+              total_downloads: 0,
+              has_downloads: false
+            };
+          }
         }
 
         // Add user-specific permissions
@@ -267,21 +294,28 @@ export default async function handler(req, res) {
           enriched.user_permissions = {
             is_owner: server.owner_id === userId,
             is_member: false,
-            can_comment: server.allow_comments
+            can_comment: server.allow_comments,
+            can_edit: server.owner_id === userId
           };
 
           // Check if user is a member
-          const { data: membership } = await supabase
-            .from('server_members')
-            .select('role')
-            .eq('server_id', server.id)
-            .eq('user_id', userId)
-            .eq('is_banned', false)
-            .single();
+          if (server.owner_id !== userId) {
+            try {
+              const { data: membership } = await supabase
+                .from('server_members')
+                .select('role')
+                .eq('server_id', server.id)
+                .eq('user_id', userId)
+                .eq('is_banned', false)
+                .single();
 
-          if (membership) {
-            enriched.user_permissions.is_member = true;
-            enriched.user_permissions.role = membership.role;
+              if (membership) {
+                enriched.user_permissions.is_member = true;
+                enriched.user_permissions.role = membership.role;
+              }
+            } catch (error) {
+              // User is not a member
+            }
           }
 
           // Check if user is leader
@@ -291,29 +325,6 @@ export default async function handler(req, res) {
         return enriched;
       })
     );
-
-    // Get trending servers (based on downloads in last 7 days)
-    const weekAgo = new Date();
-    weekAgo.setDate(weekAgo.getDate() - 7);
-    
-    const { data: trendingStats } = await supabase
-      .from('server_stats')
-      .select(`
-        server_id,
-        servers!inner(name, virtual_url, banner_url)
-      `)
-      .eq('action', 'download')
-      .gte('created_at', weekAgo.toISOString())
-      .order('created_at', { ascending: false })
-      .limit(10);
-
-    const trendingServers = trendingStats?.map(stat => ({
-      id: stat.server_id,
-      name: stat.servers.name,
-      virtual_url: stat.servers.virtual_url,
-      banner_url: stat.servers.banner_url,
-      trending_score: 1 // Could be calculated based on download frequency
-    })) || [];
 
     // Get categories for filtering
     const { data: categories } = await supabase
@@ -335,8 +346,7 @@ export default async function handler(req, res) {
         limit: limitNum,
         pages: Math.ceil((totalCount || 0) / limitNum),
         has_more: (pageNum * limitNum) < (totalCount || 0),
-        categories: uniqueCategories,
-        trending: trendingServers
+        categories: uniqueCategories
       }
     };
 
