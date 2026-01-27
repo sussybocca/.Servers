@@ -42,10 +42,22 @@ async function getUserIdFromSession(req) {
 }
 
 export default async function handler(req, res) {
-  if (req.method !== 'GET') {
-    return res.status(405).json({ success: false, error: 'Method not allowed' });
+  // Handle GET requests for fetching servers
+  if (req.method === 'GET') {
+    return handleGetServers(req, res);
   }
+  
+  // Handle POST requests for posting comments
+  if (req.method === 'POST') {
+    return handlePostComment(req, res);
+  }
+  
+  // Handle any other methods
+  return res.status(405).json({ success: false, error: 'Method not allowed' });
+}
 
+// Handle GET request for fetching servers
+async function handleGetServers(req, res) {
   try {
     const {
       category,
@@ -366,6 +378,149 @@ export default async function handler(req, res) {
     res.status(500).json({
       success: false,
       error: 'Failed to load servers: ' + error.message
+    });
+  }
+}
+
+// Handle POST request for posting comments
+async function handlePostComment(req, res) {
+  try {
+    // Get user ID from session
+    const userId = await getUserIdFromSession(req);
+    
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required'
+      });
+    }
+
+    // Parse and validate request body
+    const { server_id, content, parent_comment_id } = req.body;
+
+    if (!server_id) {
+      return res.status(400).json({
+        success: false,
+        error: 'Server ID is required'
+      });
+    }
+
+    if (!content || content.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Comment content is required'
+      });
+    }
+
+    // Trim and validate content length
+    const trimmedContent = content.trim();
+    if (trimmedContent.length > 5000) {
+      return res.status(400).json({
+        success: false,
+        error: 'Comment must be less than 5000 characters'
+      });
+    }
+
+    // Check if server exists
+    const { data: server, error: serverError } = await supabase
+      .from('servers')
+      .select('id, allow_comments, is_public, owner_id')
+      .eq('id', server_id)
+      .single();
+
+    if (serverError || !server) {
+      return res.status(404).json({
+        success: false,
+        error: 'Server not found'
+      });
+    }
+
+    // Check if comments are allowed
+    if (!server.allow_comments) {
+      return res.status(403).json({
+        success: false,
+        error: 'Comments are disabled for this server'
+      });
+    }
+
+    // Check if user has access to the server
+    if (!server.is_public) {
+      // For private servers, check if user is a member
+      const { data: membership, error: membershipError } = await supabase
+        .from('server_members')
+        .select('id, is_banned')
+        .eq('server_id', server_id)
+        .eq('user_id', userId)
+        .eq('is_banned', false)
+        .single();
+
+      if (membershipError || !membership) {
+        return res.status(403).json({
+          success: false,
+          error: 'You do not have permission to comment on this server'
+        });
+      }
+    }
+
+    // Check for parent comment if replying
+    if (parent_comment_id) {
+      const { data: parentComment, error: parentError } = await supabase
+        .from('server_comments')
+        .select('id, server_id')
+        .eq('id', parent_comment_id)
+        .single();
+
+      if (parentError || !parentComment) {
+        return res.status(404).json({
+          success: false,
+          error: 'Parent comment not found'
+        });
+      }
+
+      if (parentComment.server_id !== server_id) {
+        return res.status(400).json({
+          success: false,
+          error: 'Parent comment does not belong to this server'
+        });
+      }
+    }
+
+    // Insert the comment
+    const { data: newComment, error: insertError } = await supabase
+      .from('server_comments')
+      .insert({
+        server_id: server_id,
+        user_id: userId,
+        content: trimmedContent,
+        parent_comment_id: parent_comment_id || null,
+        is_edited: false
+      })
+      .select(`
+        *,
+        user:users!server_comments_user_id_fkey(id, username, avatar_url, online)
+      `)
+      .single();
+
+    if (insertError) {
+      console.error('Error inserting comment:', insertError);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to post comment'
+      });
+    }
+
+    // Return success response with the new comment
+    res.status(201).json({
+      success: true,
+      comment: newComment,
+      message: 'Comment posted successfully'
+    });
+
+  } catch (error) {
+    console.error('Error posting comment:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error'
     });
   }
 }
