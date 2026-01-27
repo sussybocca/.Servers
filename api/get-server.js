@@ -193,7 +193,7 @@ async function handleGetServer(req, res) {
           for (let version of response.versions) {
             const { data: files } = await supabase
               .from('version_files')
-              .select('id, path, file_size, file_hash, created_at, updated_at')
+              .select('id, path, content, file_size, file_hash, created_at, updated_at') // ← ADDED 'content' HERE
               .eq('version_id', version.id);
             version.files = files || [];
           }
