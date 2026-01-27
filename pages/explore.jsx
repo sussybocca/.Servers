@@ -14,10 +14,18 @@ export default function ExplorePage() {
   const [serverContent, setServerContent] = useState('');
   const [showWarning, setShowWarning] = useState(true);
   const [iframeKey, setIframeKey] = useState(0);
-  const [viewMode, setViewMode] = useState('all'); // 'all', 'featured', 'trending', 'recent'
+  const [viewMode, setViewMode] = useState('all');
   const [selectedFile, setSelectedFile] = useState(null);
   const [filePreview, setFilePreview] = useState('');
   const [expandedFolders, setExpandedFolders] = useState({});
+  const [serverVersions, setServerVersions] = useState([]);
+  const [serverComments, setServerComments] = useState([]);
+  const [serverStats, setServerStats] = useState(null);
+  const [serverMembers, setServerMembers] = useState([]);
+  const [showCommentForm, setShowCommentForm] = useState(false);
+  const [newComment, setNewComment] = useState('');
+  const [downloadingVersion, setDownloadingVersion] = useState(null);
+  const [commentError, setCommentError] = useState('');
   const warningAccepted = useRef(false);
 
   useEffect(() => {
@@ -37,7 +45,7 @@ export default function ExplorePage() {
 
   const loadServers = async () => {
     try {
-      const response = await fetch('/api/get-servers');
+      const response = await fetch('/api/get-servers?includeStats=true&includeComments=true&includeVersions=true');
       const data = await response.json();
       if (data.servers) {
         setServers(data.servers);
@@ -47,19 +55,21 @@ export default function ExplorePage() {
     }
   };
 
-  // 🔧 2. SERVER NAVIGATION SOCIAL FEATURES
   const getFeaturedServers = () => {
-    return servers.filter(server => server.is_public && server.views > 10)
-      .sort((a, b) => b.views - a.views)
+    return servers.filter(server => server.is_public && (server.stats?.total_downloads > 100 || server.comment_count > 20))
+      .sort((a, b) => {
+        const aScore = (a.stats?.total_downloads || 0) + (a.comment_count || 0);
+        const bScore = (b.stats?.total_downloads || 0) + (b.comment_count || 0);
+        return bScore - aScore;
+      })
       .slice(0, 6);
   };
 
   const getTrendingServers = () => {
     return servers.filter(server => server.is_public)
       .sort((a, b) => {
-        // Simple trending algorithm: more views = more trending
-        const aScore = a.views * (a.renewal_date ? 1.5 : 1);
-        const bScore = b.views * (b.renewal_date ? 1.5 : 1);
+        const aScore = (a.comment_count || 0) * 2 + (a.stats?.total_downloads || 0);
+        const bScore = (b.comment_count || 0) * 2 + (b.stats?.total_downloads || 0);
         return bScore - aScore;
       })
       .slice(0, 8);
@@ -80,19 +90,16 @@ export default function ExplorePage() {
       case 'recent':
         return getRecentlyUpdated();
       default:
-        return servers;
+        return servers.filter(server => server.is_public || (user && (server.owner_id === user.id || server.user_permissions?.is_member)));
     }
   };
 
   const getServerTags = (server) => {
-    // Simple tag extraction from description
     const tags = [];
-    if (server.description?.toLowerCase().includes('html')) tags.push('HTML');
-    if (server.description?.toLowerCase().includes('css')) tags.push('CSS');
-    if (server.description?.toLowerCase().includes('javascript') || server.description?.toLowerCase().includes('js')) tags.push('JavaScript');
-    if (server.description?.toLowerCase().includes('game')) tags.push('Game');
-    if (server.description?.toLowerCase().includes('portfolio')) tags.push('Portfolio');
-    if (server.description?.toLowerCase().includes('demo')) tags.push('Demo');
+    if (server.category) tags.push(server.category);
+    if (server.latest_version) tags.push(`v${server.latest_version.version_number}`);
+    if (server.total_downloads > 100) tags.push('🔥 Popular');
+    if (server.comment_count > 10) tags.push('💬 Active');
     return tags.slice(0, 3);
   };
 
@@ -108,111 +115,242 @@ export default function ExplorePage() {
     setSelectedFile(null);
     setFilePreview('');
     setExpandedFolders({});
+    setServerVersions([]);
+    setServerComments([]);
+    setServerStats(null);
+    setServerMembers([]);
+    setShowCommentForm(false);
+    setNewComment('');
     
     try {
-      const filesRes = await fetch(`/api/get-server-files?serverId=${serverId}`);
-      const filesData = await filesRes.json();
+      // Load comprehensive server data using the new API
+      const serverRes = await fetch(`/api/get-server?serverId=${serverId}&includeVersions=true&includeComments=true&includeStats=true&includeMembers=true`);
+      const serverData = await serverRes.json();
       
-      if (filesData.success && filesData.files) {
-        setServerFiles(filesData.files);
-        const indexFile = filesData.files.find(f => f.path === '/index.html');
-        if (indexFile && indexFile.content) {
-          setServerContent(indexFile.content);
+      if (serverData.success) {
+        const currentServer = serverData.server;
+        
+        // Update servers list with latest data
+        setServers(prev => prev.map(s => s.id === serverId ? { ...s, ...currentServer } : s));
+        
+        // Set versions
+        if (serverData.versions) {
+          setServerVersions(serverData.versions);
+          
+          // Check if we have files in versions (assuming files are included in versions data)
+          const allFiles = [];
+          serverData.versions.forEach(version => {
+            if (version.files && version.files.length > 0) {
+              version.files.forEach(file => {
+                allFiles.push({
+                  ...file,
+                  version_id: version.id,
+                  version_name: version.version_name
+                });
+              });
+            }
+          });
+          setServerFiles(allFiles);
+          
+          // Find index.html file
+          const indexFile = allFiles.find(f => 
+            f.path === '/index.html' || 
+            f.path.endsWith('/index.html') || 
+            f.path === 'index.html'
+          );
+          
+          if (indexFile && indexFile.content) {
+            setServerContent(indexFile.content);
+          } else {
+            setServerContent(generateDefaultPage(currentServer, serverData.versions[0]));
+          }
         } else {
-          setServerContent(`
-            <!DOCTYPE html>
-            <html>
-              <head>
-                <style>
-                  body {
-                    margin: 0;
-                    padding: 40px;
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                    color: white;
-                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                    min-height: 100vh;
-                    display: flex;
-                    flex-direction: column;
-                    align-items: center;
-                    justify-content: center;
-                  }
-                  h1 {
-                    font-size: 3em;
-                    margin-bottom: 20px;
-                    text-shadow: 0 2px 10px rgba(0,0,0,0.3);
-                  }
-                  p {
-                    font-size: 1.2em;
-                    opacity: 0.9;
-                    max-width: 600px;
-                    text-align: center;
-                    line-height: 1.6;
-                  }
-                  .server-info {
-                    background: rgba(255,255,255,0.1);
-                    padding: 20px;
-                    border-radius: 15px;
-                    margin-top: 30px;
-                    backdrop-filter: blur(10px);
-                  }
-                </style>
-              </head>
-              <body>
-                <h1>🚀 Welcome to Server.x</h1>
-                <p>This server doesn't have an index.html file yet.</p>
-                <p>The owner can upload files using the editor to customize this page.</p>
-                <div class="server-info">
-                  <p>💡 Tip: Create your own server with HTML, CSS, and JavaScript!</p>
-                </div>
-                <script>
-                  console.log('Server.x default page loaded');
-                </script>
-              </body>
-            </html>
-          `);
+          setServerContent(generateDefaultPage(currentServer, null));
+        }
+        
+        // Set comments
+        if (serverData.comments) {
+          setServerComments(serverData.comments);
+        }
+        
+        // Set stats
+        if (serverData.stats) {
+          setServerStats(serverData.stats);
+        }
+        
+        // Set members
+        if (serverData.members) {
+          setServerMembers(serverData.members);
         }
       }
       
-      // Increment views
-      await fetch('/api/increment-views', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ serverId })
-      });
-      
     } catch (error) {
       console.error('Failed to load server:', error);
-      setServerContent(`
-        <html>
-          <body style="background: #1a1a1a; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; font-family: sans-serif;">
-            <div style="text-align: center; padding: 40px;">
-              <h1 style="color: #ff6b6b;">⚠️ Error Loading Server</h1>
-              <p>Please try again later.</p>
-            </div>
-          </body>
-        </html>
-      `);
+      setServerContent(generateErrorPage());
     } finally {
       setLoadingServer(false);
       setIframeKey(prev => prev + 1);
     }
   };
 
-  // 🔧 3. ENHANCED FILE PREVIEW
+  const generateDefaultPage = (server, latestVersion) => {
+    return `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>${server?.name || 'Server.x'} - ${latestVersion?.version_name || 'Default Page'}</title>
+          <style>
+            body {
+              margin: 0;
+              padding: 40px;
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+              color: white;
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+              min-height: 100vh;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
+              text-align: center;
+            }
+            h1 {
+              font-size: 3em;
+              margin-bottom: 20px;
+              text-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            }
+            .server-info {
+              background: rgba(255,255,255,0.1);
+              padding: 30px;
+              border-radius: 15px;
+              margin-top: 30px;
+              backdrop-filter: blur(10px);
+              max-width: 600px;
+            }
+            .version-info {
+              background: rgba(0,0,0,0.2);
+              padding: 15px;
+              border-radius: 10px;
+              margin-top: 20px;
+            }
+            .stats {
+              display: flex;
+              gap: 20px;
+              margin-top: 20px;
+              justify-content: center;
+              flex-wrap: wrap;
+            }
+            .stat {
+              background: rgba(255,255,255,0.15);
+              padding: 10px 20px;
+              border-radius: 10px;
+              min-width: 120px;
+            }
+          </style>
+        </head>
+        <body>
+          <h1>🚀 ${server?.name || 'Server.x'}</h1>
+          <p style="font-size: 1.2em; max-width: 600px; line-height: 1.6;">
+            ${server?.description || 'This server is hosted on Server.x platform.'}
+          </p>
+          
+          <div class="server-info">
+            ${latestVersion ? `
+              <div class="version-info">
+                <h3 style="margin-top: 0;">Latest Version: ${latestVersion.version_name}</h3>
+                <p>${latestVersion.description || 'No description provided.'}</p>
+                <div class="stats">
+                  <div class="stat">📥 ${latestVersion.download_count || 0} downloads</div>
+                  ${latestVersion.release_date ? `<div class="stat">📅 Released: ${new Date(latestVersion.release_date).toLocaleDateString()}</div>` : ''}
+                </div>
+              </div>
+            ` : ''}
+            
+            <div class="stats" style="margin-top: 30px;">
+              <div class="stat">👁️ ${server?.views || 0} views</div>
+              <div class="stat">💬 ${server?.comment_count || 0} comments</div>
+              ${server?.total_downloads ? `<div class="stat">📦 ${server.total_downloads} total downloads</div>` : ''}
+            </div>
+            
+            <p style="margin-top: 25px; opacity: 0.9; font-style: italic;">
+              💡 This is a default page. The server owner can upload custom HTML files in the editor.
+            </p>
+          </div>
+          <script>
+            console.log('Server.x page loaded for ${server?.name || 'unknown server'}');
+            document.addEventListener('click', function() {
+              window.parent.postMessage({ type: 'server_interaction' }, '*');
+            });
+          </script>
+        </body>
+      </html>
+    `;
+  };
+
+  const generateErrorPage = () => {
+    return `
+      <html>
+        <head>
+          <style>
+            body {
+              background: #1a1a1a;
+              color: white;
+              display: flex;
+              justify-content: center;
+              align-items: center;
+              height: 100vh;
+              margin: 0;
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+              text-align: center;
+              line-height: 1.6;
+            }
+            .error-container {
+              max-width: 500px;
+              padding: 40px;
+              background: rgba(255,255,255,0.05);
+              border-radius: 15px;
+              border: 2px solid rgba(255, 107, 107, 0.3);
+              backdrop-filter: blur(10px);
+            }
+            .error-list {
+              text-align: left;
+              margin: 20px 0;
+              padding-left: 20px;
+            }
+            .error-list li {
+              margin-bottom: 10px;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="error-container">
+            <h1 style="color: #ff6b6b; margin-bottom: 20px;">⚠️ Error Loading Server</h1>
+            <p>The server could not be loaded. This might be due to:</p>
+            <ul class="error-list">
+              <li>Server is private and requires membership</li>
+              <li>Temporary server issues</li>
+              <li>Missing files or configurations</li>
+              <li>Network connectivity problems</li>
+            </ul>
+            <p>Please try again later or contact the server owner.</p>
+          </div>
+        </body>
+      </html>
+    `;
+  };
+
   const viewFile = (file) => {
     setSelectedFile(file);
     
-    // Determine file type and format content
     let previewContent = '';
     if (file.content) {
       const ext = file.path.split('.').pop().toLowerCase();
       if (['html', 'css', 'js', 'json', 'txt', 'md'].includes(ext)) {
         previewContent = file.content;
       } else {
-        previewContent = `// Binary or unsupported file type: ${file.path}\n// File size: ${file.content.length} bytes`;
+        previewContent = `// Binary or unsupported file type: ${file.path}\n// File size: ${file.content.length} bytes\n// From version: ${file.version_name}`;
       }
     } else {
-      previewContent = '// No content available for this file';
+      previewContent = `// No content available for this file\n// Path: ${file.path}\n// Version: ${file.version_name}`;
     }
     
     setFilePreview(previewContent);
@@ -273,6 +411,9 @@ export default function ExplorePage() {
                item.path.endsWith('.json') ? '📋' : '📄'}
             </span>
             <span style={styles.fileName}>{name}</span>
+            {item.version_name && (
+              <span style={styles.versionTag}>v{item.version_name}</span>
+            )}
           </motion.div>
         );
       } else {
@@ -310,6 +451,119 @@ export default function ExplorePage() {
     });
   };
 
+  const postComment = async () => {
+    if (!newComment.trim()) {
+      setCommentError('Comment cannot be empty');
+      return;
+    }
+
+    if (!user) {
+      setCommentError('Please log in to comment');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/get-server', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'comment',
+          server_id: selectedServer,
+          content: newComment,
+          parent_comment_id: null
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        // Add the new comment to the top of the list
+        setServerComments(prev => [data.comment, ...prev]);
+        setNewComment('');
+        setShowCommentForm(false);
+        setCommentError('');
+        
+        // Update the server's comment count
+        setServers(prev => prev.map(server => 
+          server.id === selectedServer 
+            ? { ...server, comment_count: (server.comment_count || 0) + 1 }
+            : server
+        ));
+      } else {
+        setCommentError(data.error || 'Failed to post comment');
+      }
+    } catch (error) {
+      console.error('Error posting comment:', error);
+      setCommentError('Network error. Please try again.');
+    }
+  };
+
+  const downloadVersion = async (versionId, versionName) => {
+    if (!user) {
+      alert('Please log in to download files');
+      return;
+    }
+
+    setDownloadingVersion(versionId);
+    
+    try {
+      const response = await fetch('/api/get-server', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'download',
+          server_id: selectedServer,
+          version_id: versionId
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.success && data.download) {
+        // Update the version's download count in state
+        setServerVersions(prev => prev.map(v => 
+          v.id === versionId 
+            ? { ...v, download_count: data.download.download_count } 
+            : v
+        ));
+        
+        // Update total downloads in servers list
+        setServers(prev => prev.map(server => 
+          server.id === selectedServer 
+            ? { 
+                ...server, 
+                total_downloads: (server.total_downloads || 0) + 1,
+                latest_version: server.latest_version?.id === versionId 
+                  ? { ...server.latest_version, download_count: data.download.download_count }
+                  : server.latest_version
+              }
+            : server
+        ));
+        
+        // If there's a file URL, trigger download
+        if (data.download.file_url) {
+          const link = document.createElement('a');
+          link.href = data.download.file_url;
+          link.download = `${versionName || 'download'}.zip`;
+          link.style.display = 'none';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        }
+        
+        // Show success message
+        alert(`✅ Download started for ${data.download.version_name}`);
+      } else {
+        alert(data.error || 'Failed to start download');
+      }
+    } catch (error) {
+      console.error('Error downloading version:', error);
+      alert('Network error. Please try again.');
+    } finally {
+      setDownloadingVersion(null);
+    }
+  };
+
   const goBackToExplore = () => {
     setSelectedServer(null);
     setServerFiles([]);
@@ -317,10 +571,17 @@ export default function ExplorePage() {
     setSelectedFile(null);
     setFilePreview('');
     setExpandedFolders({});
+    setServerVersions([]);
+    setServerComments([]);
+    setServerStats(null);
+    setServerMembers([]);
+    setShowCommentForm(false);
+    setNewComment('');
+    setCommentError('');
   };
 
   const logout = () => {
-    document.cookie = '__Host-session_secure=; Max-Age=0; Path=/';
+    document.cookie = '__Host-session_secure=; Max-Age=0; Path=/; Secure; SameSite=Strict';
     window.location.href = '/login';
   };
 
@@ -343,7 +604,6 @@ export default function ExplorePage() {
   const filteredServers = getFilteredServers();
   const fileTree = organizeFilesTree(serverFiles);
 
-  // Render warning modal
   const renderWarningModal = () => (
     <motion.div
       style={styles.modalOverlay}
@@ -377,6 +637,7 @@ export default function ExplorePage() {
             <li>All servers are <strong>isolated and secured</strong></li>
             <li>No access to your personal data or cookies</li>
             <li>Refresh to exit any server view</li>
+            <li>Comments and downloads require authentication</li>
           </ul>
           <p style={styles.modalFooter}>Click below to continue exploring safely.</p>
         </div>
@@ -400,7 +661,6 @@ export default function ExplorePage() {
     </motion.div>
   );
 
-  // Render file preview modal
   const renderFilePreview = () => (
     <motion.div
       style={styles.previewOverlay}
@@ -418,6 +678,9 @@ export default function ExplorePage() {
         <div style={styles.previewHeader}>
           <h3 style={styles.previewTitle}>
             📄 {selectedFile?.path || 'File Preview'}
+            {selectedFile?.version_name && (
+              <span style={styles.versionBadge}>v{selectedFile.version_name}</span>
+            )}
           </h3>
           <motion.button
             style={styles.closePreviewButton}
@@ -437,179 +700,366 @@ export default function ExplorePage() {
     </motion.div>
   );
 
-  // Render server view
-  const renderServerView = () => (
-    <motion.div
-      key="server-view"
-      initial={{ opacity: 0, x: -50 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: 50 }}
-      style={styles.serverView}
+  const renderVersionsSection = () => (
+    <motion.div 
+      style={styles.versionsSection}
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
     >
-      <motion.div 
-        style={styles.serverHeader}
-        initial={{ y: -100 }}
-        animate={{ y: 0 }}
-        transition={{ type: "spring", stiffness: 100 }}
-      >
-        <div style={styles.headerLeft}>
-          <motion.button
-            style={styles.backButton}
-            onClick={goBackToExplore}
-            whileHover={{ scale: 1.05, x: -5 }}
-            whileTap={{ scale: 0.95 }}
-          >
-            <motion.span
-              animate={{ x: [0, -5, 0] }}
-              transition={{ duration: 1.5, repeat: Infinity }}
-            >
-              ←
-            </motion.span>
-            Back to Explore
-          </motion.button>
-          
-          <div style={styles.serverInfo}>
-            <motion.h2 
-              style={styles.serverTitle}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.2 }}
-            >
-              {currentServer?.name || 'Loading...'}
-            </motion.h2>
-            <motion.p 
-              style={styles.serverDesc}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.3 }}
-            >
-              {currentServer?.description || 'No description'}
-            </motion.p>
-          </div>
-        </div>
-
-        <div style={styles.headerRight}>
-          <motion.div 
-            style={styles.serverStats}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.4 }}
-          >
-            <motion.span
-              whileHover={{ scale: 1.1 }}
-              style={styles.statItem}
-            >
-              👁️ {currentServer?.views || 0}
-            </motion.span>
-            <motion.span
-              whileHover={{ scale: 1.1 }}
-              style={{
-                ...styles.statItem,
-                backgroundColor: currentServer?.is_public 
-                  ? 'rgba(66, 133, 244, 0.15)' 
-                  : 'rgba(234, 67, 53, 0.15)',
-                color: currentServer?.is_public ? '#4285f4' : '#ea4335',
-                border: `2px solid ${currentServer?.is_public ? '#4285f4' : '#ea4335'}`
-              }}
-            >
-              {currentServer?.is_public ? '🌐 Public' : '🔒 Private'}
-            </motion.span>
-          </motion.div>
-          
-          <motion.button
-            style={styles.refreshButton}
-            onClick={refreshServer}
-            whileHover={{ scale: 1.1, rotate: 180 }}
-            whileTap={{ scale: 0.9 }}
-          >
-            🔄
-          </motion.button>
-        </div>
-      </motion.div>
-
-      <motion.div 
-        style={styles.warningBox}
-        initial={{ y: -50, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ delay: 0.1 }}
-      >
-        <motion.span
-          animate={{ rotate: [0, 10, -10, 0] }}
-          transition={{ duration: 2, repeat: Infinity }}
-        >
-          ⚠️
-        </motion.span>
-        Viewing user-generated content in a sandboxed environment
-      </motion.div>
-
-      <div style={styles.contentArea}>
-        {loadingServer ? (
-          <motion.div 
-            style={styles.loadingContainer}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-          >
-            <motion.div
-              style={styles.spinner}
-              animate={{ rotate: 360 }}
-              transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-            >
-              <div style={styles.spinnerInner} />
-            </motion.div>
-            <motion.h3
-              style={styles.loadingText}
-              animate={{ opacity: [0.5, 1, 0.5] }}
-              transition={{ duration: 2, repeat: Infinity }}
-            >
-              Loading server...
-            </motion.h3>
-          </motion.div>
-        ) : (
+      <h4 style={styles.versionsTitle}>📦 Server Versions ({serverVersions.length})</h4>
+      <div style={styles.versionsGrid}>
+        {serverVersions.map((version, index) => (
           <motion.div
-            style={styles.iframeContainer}
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.2 }}
+            key={version.id}
+            style={styles.versionCard}
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: index * 0.1 }}
+            whileHover={{ scale: 1.02 }}
           >
-            {/* 🔧 1. ENHANCED IFRAME SECURITY - Reduced permissions */}
-            <iframe
-              key={iframeKey}
-              srcDoc={serverContent}
-              style={styles.serverIframe}
-              title="Server Content"
-              sandbox="allow-scripts"
-            />
+            <div style={styles.versionHeader}>
+              <h5 style={styles.versionName}>{version.version_name}</h5>
+              <span style={styles.versionNumber}>v{version.version_number}</span>
+            </div>
+            <p style={styles.versionDesc}>{version.description || 'No description'}</p>
+            <div style={styles.versionStats}>
+              <span style={styles.versionStat}>
+                📥 {version.download_count || 0} downloads
+              </span>
+              {version.release_date && (
+                <span style={styles.versionStat}>
+                  📅 {new Date(version.release_date).toLocaleDateString()}
+                </span>
+              )}
+            </div>
+            <motion.button
+              style={styles.downloadButton}
+              onClick={() => downloadVersion(version.id, version.version_name)}
+              disabled={downloadingVersion === version.id}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+            >
+              {downloadingVersion === version.id ? '⏳ Downloading...' : '⬇️ Download'}
+            </motion.button>
           </motion.div>
-        )}
+        ))}
       </div>
-
-      <motion.div 
-        style={styles.fileList}
-        initial={{ y: 50, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ delay: 0.3 }}
-      >
-        <motion.h4 
-          style={styles.fileListTitle}
-          whileHover={{ x: 5 }}
-        >
-          📁 Server Files ({serverFiles.length})
-          {serverFiles.length > 0 && (
-            <span style={styles.fileListHint}> (Click any file to preview)</span>
-          )}
-        </motion.h4>
-        <div style={styles.fileTree}>
-          {renderFileTree(fileTree)}
-        </div>
-      </motion.div>
-
-      <AnimatePresence>
-        {selectedFile && renderFilePreview()}
-      </AnimatePresence>
     </motion.div>
   );
 
-  // Render explore grid with social features
+  const renderCommentsSection = () => (
+    <motion.div 
+      style={styles.commentsSection}
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+    >
+      <div style={styles.commentsHeader}>
+        <h4 style={styles.commentsTitle}>
+          💬 Comments ({serverComments.length})
+          {currentServer?.allow_comments && user && (
+            <motion.button
+              style={styles.newCommentButton}
+              onClick={() => setShowCommentForm(!showCommentForm)}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+            >
+              {showCommentForm ? 'Cancel' : '+ Add Comment'}
+            </motion.button>
+          )}
+        </h4>
+      </div>
+
+      {showCommentForm && (
+        <motion.div
+          style={styles.commentForm}
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+        >
+          <textarea
+            style={styles.commentTextarea}
+            value={newComment}
+            onChange={(e) => setNewComment(e.target.value)}
+            placeholder="Write your comment here..."
+            rows={4}
+            maxLength={5000}
+          />
+          {commentError && (
+            <div style={styles.commentError}>{commentError}</div>
+          )}
+          <div style={styles.commentFormActions}>
+            <motion.button
+              style={styles.submitCommentButton}
+              onClick={postComment}
+              disabled={!newComment.trim()}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+            >
+              Post Comment
+            </motion.button>
+            <span style={styles.commentLength}>
+              {newComment.length}/5000
+            </span>
+          </div>
+        </motion.div>
+      )}
+
+      <div style={styles.commentsList}>
+        {serverComments.length > 0 ? (
+          serverComments.map((comment, index) => (
+            <motion.div
+              key={comment.id}
+              style={styles.commentCard}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.05 }}
+            >
+              <div style={styles.commentHeader}>
+                <div style={styles.commentUser}>
+                  <img 
+                    src={comment.user?.avatar_url || '/default-avatar.png'} 
+                    alt={comment.user?.username}
+                    style={styles.commentAvatar}
+                    onError={(e) => {
+                      e.target.src = '/default-avatar.png';
+                    }}
+                  />
+                  <div>
+                    <strong style={styles.commentUsername}>
+                      {comment.user?.username || 'Anonymous'}
+                    </strong>
+                    <div style={styles.commentDate}>
+                      {new Date(comment.created_at).toLocaleDateString()}
+                      {comment.is_edited && ' (edited)'}
+                    </div>
+                  </div>
+                </div>
+                {comment.bug_report && (
+                  <span style={styles.bugReportTag}>
+                    🐛 Bug Report
+                    {comment.bug_severity && ` (${comment.bug_severity})`}
+                  </span>
+                )}
+              </div>
+              <div style={styles.commentContent}>
+                {comment.content}
+              </div>
+            </motion.div>
+          ))
+        ) : (
+          <div style={styles.noComments}>
+            {currentServer?.allow_comments 
+              ? 'No comments yet. Be the first to comment!'
+              : 'Comments are disabled for this server.'}
+          </div>
+        )}
+      </div>
+    </motion.div>
+  );
+
+  const renderServerView = () => {
+    const currentServer = servers.find(s => s.id === selectedServer);
+    
+    return (
+      <motion.div
+        key="server-view"
+        initial={{ opacity: 0, x: -50 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: 50 }}
+        style={styles.serverView}
+      >
+        <motion.div 
+          style={styles.serverHeader}
+          initial={{ y: -100 }}
+          animate={{ y: 0 }}
+          transition={{ type: "spring", stiffness: 100 }}
+        >
+          <div style={styles.headerLeft}>
+            <motion.button
+              style={styles.backButton}
+              onClick={goBackToExplore}
+              whileHover={{ scale: 1.05, x: -5 }}
+              whileTap={{ scale: 0.95 }}
+            >
+              <motion.span
+                animate={{ x: [0, -5, 0] }}
+                transition={{ duration: 1.5, repeat: Infinity }}
+              >
+                ←
+              </motion.span>
+              Back to Explore
+            </motion.button>
+            
+            <div style={styles.serverInfo}>
+              <motion.h2 
+                style={styles.serverTitle}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.2 }}
+              >
+                {currentServer?.name || 'Loading...'}
+              </motion.h2>
+              <motion.p 
+                style={styles.serverDesc}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.3 }}
+              >
+                {currentServer?.description || 'No description'}
+              </motion.p>
+              <div style={styles.serverMeta}>
+                <span style={styles.serverCategory}>
+                  {currentServer?.category || 'Uncategorized'}
+                </span>
+                <span style={styles.serverOwner}>
+                  👤 {currentServer?.owner?.username || 'Unknown'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div style={styles.headerRight}>
+            <motion.div 
+              style={styles.serverStats}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.4 }}
+            >
+              <motion.span
+                whileHover={{ scale: 1.1 }}
+                style={styles.statItem}
+              >
+                👁️ {currentServer?.views || 0}
+              </motion.span>
+              <motion.span
+                whileHover={{ scale: 1.1 }}
+                style={styles.statItem}
+              >
+                💬 {currentServer?.comment_count || 0}
+              </motion.span>
+              <motion.span
+                whileHover={{ scale: 1.1 }}
+                style={styles.statItem}
+              >
+                📥 {currentServer?.total_downloads || 0}
+              </motion.span>
+              <motion.span
+                whileHover={{ scale: 1.1 }}
+                style={{
+                  ...styles.statItem,
+                  backgroundColor: currentServer?.is_public 
+                    ? 'rgba(66, 133, 244, 0.15)' 
+                    : 'rgba(234, 67, 53, 0.15)',
+                  color: currentServer?.is_public ? '#4285f4' : '#ea4335',
+                  border: `2px solid ${currentServer?.is_public ? '#4285f4' : '#ea4335'}`
+                }}
+              >
+                {currentServer?.is_public ? '🌐 Public' : '🔒 Private'}
+              </motion.span>
+            </motion.div>
+            
+            <motion.button
+              style={styles.refreshButton}
+              onClick={refreshServer}
+              whileHover={{ scale: 1.1, rotate: 180 }}
+              whileTap={{ scale: 0.9 }}
+            >
+              🔄
+            </motion.button>
+          </div>
+        </motion.div>
+
+        <motion.div 
+          style={styles.warningBox}
+          initial={{ y: -50, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.1 }}
+        >
+          <motion.span
+            animate={{ rotate: [0, 10, -10, 0] }}
+            transition={{ duration: 2, repeat: Infinity }}
+          >
+            ⚠️
+          </motion.span>
+          Viewing user-generated content in a sandboxed environment
+          {!user && ' (Log in to comment or download files)'}
+        </motion.div>
+
+        <div style={styles.mainContentArea}>
+          <div style={styles.leftColumn}>
+            <div style={styles.iframeContainer}>
+              {loadingServer ? (
+                <motion.div 
+                  style={styles.loadingContainer}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                >
+                  <motion.div
+                    style={styles.spinner}
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                  >
+                    <div style={styles.spinnerInner} />
+                  </motion.div>
+                  <motion.h3
+                    style={styles.loadingText}
+                    animate={{ opacity: [0.5, 1, 0.5] }}
+                    transition={{ duration: 2, repeat: Infinity }}
+                  >
+                    Loading server...
+                  </motion.h3>
+                </motion.div>
+              ) : (
+                <motion.div
+                  style={styles.iframeWrapper}
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.2 }}
+                >
+                  <iframe
+                    key={iframeKey}
+                    srcDoc={serverContent}
+                    style={styles.serverIframe}
+                    title="Server Content"
+                    sandbox="allow-scripts allow-same-origin"
+                  />
+                </motion.div>
+              )}
+            </div>
+
+            <motion.div 
+              style={styles.fileList}
+              initial={{ y: 50, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.3 }}
+            >
+              <motion.h4 
+                style={styles.fileListTitle}
+                whileHover={{ x: 5 }}
+              >
+                📁 Server Files ({serverFiles.length})
+                {serverFiles.length > 0 && (
+                  <span style={styles.fileListHint}> (Click any file to preview)</span>
+                )}
+              </motion.h4>
+              <div style={styles.fileTree}>
+                {renderFileTree(fileTree)}
+              </div>
+            </motion.div>
+          </div>
+
+          <div style={styles.rightColumn}>
+            {serverVersions.length > 0 && renderVersionsSection()}
+            {renderCommentsSection()}
+          </div>
+        </div>
+
+        <AnimatePresence>
+          {selectedFile && renderFilePreview()}
+        </AnimatePresence>
+      </motion.div>
+    );
+  };
+
   const renderExploreGrid = () => (
     <motion.div
       key="explore-grid"
@@ -636,7 +1086,6 @@ export default function ExplorePage() {
         Click any server to view its content in a <span style={{ color: '#4285f4', fontWeight: 'bold' }}>secure sandbox</span>
       </motion.p>
 
-      {/* 🔧 2. SOCIAL NAVIGATION CONTROLS */}
       <motion.div 
         style={styles.navigationControls}
         initial={{ y: -20, opacity: 0 }}
@@ -723,7 +1172,6 @@ export default function ExplorePage() {
               >
                 <div className="card-glow" style={styles.cardGlow} />
                 
-                {/* Badge indicators */}
                 <div style={styles.cardBadges}>
                   {isFeatured && (
                     <motion.span
@@ -787,7 +1235,6 @@ export default function ExplorePage() {
                   {server.description || 'No description provided.'}
                 </motion.p>
                 
-                {/* Tags */}
                 {tags.length > 0 && (
                   <motion.div 
                     style={styles.tagContainer}
@@ -822,7 +1269,13 @@ export default function ExplorePage() {
                     whileHover={{ scale: 1.1 }}
                     style={styles.statSmall}
                   >
-                    🔄 {server.renewal_date ? 'Renews: ' + new Date(server.renewal_date).toLocaleDateString() : 'No renewal'}
+                    💬 {server.comment_count || 0} comments
+                  </motion.span>
+                  <motion.span
+                    whileHover={{ scale: 1.1 }}
+                    style={styles.statSmall}
+                  >
+                    📥 {server.total_downloads || 0} downloads
                   </motion.span>
                 </motion.div>
               </motion.div>
@@ -878,19 +1331,33 @@ export default function ExplorePage() {
                 style={styles.username}
                 whileHover={{ scale: 1.05 }}
               >
-                👤 {user?.username || 'User'}
+                👤 {user?.username || 'Guest'}
               </motion.span>
-              <motion.button
-                style={styles.logoutButton}
-                onClick={logout}
-                whileHover={{ 
-                  scale: 1.05,
-                  boxShadow: '0 0 10px rgba(102, 102, 102, 0.3)'
-                }}
-                whileTap={{ scale: 0.95 }}
-              >
-                Logout
-              </motion.button>
+              {user ? (
+                <motion.button
+                  style={styles.logoutButton}
+                  onClick={logout}
+                  whileHover={{ 
+                    scale: 1.05,
+                    boxShadow: '0 0 10px rgba(102, 102, 102, 0.3)'
+                  }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  Logout
+                </motion.button>
+              ) : (
+                <motion.button
+                  style={styles.loginButton}
+                  onClick={() => window.location.href = '/login'}
+                  whileHover={{ 
+                    scale: 1.05,
+                    boxShadow: '0 0 10px rgba(66, 133, 244, 0.3)'
+                  }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  Login
+                </motion.button>
+              )}
             </div>
           </div>
         </motion.div>
@@ -905,7 +1372,6 @@ export default function ExplorePage() {
   );
 }
 
-// === ADVANCED STYLES ===
 const styles = {
   container: { 
     minHeight: '100vh', 
@@ -969,6 +1435,16 @@ const styles = {
     background: 'rgba(102, 102, 102, 0.3)', 
     color: 'white', 
     border: '1px solid rgba(255,255,255,0.2)',
+    padding: '8px 16px', 
+    borderRadius: '20px', 
+    cursor: 'pointer',
+    fontWeight: '600',
+    fontSize: '13px'
+  },
+  loginButton: { 
+    background: 'rgba(66, 133, 244, 0.3)', 
+    color: '#8ab4f8', 
+    border: '1px solid rgba(66, 133, 244, 0.5)',
     padding: '8px 16px', 
     borderRadius: '20px', 
     cursor: 'pointer',
@@ -1152,7 +1628,8 @@ const styles = {
   },
   serverStatsGrid: { 
     display: 'flex', 
-    justifyContent: 'space-between', 
+    flexWrap: 'wrap',
+    gap: '10px', 
     color: '#888', 
     fontSize: '13px', 
     borderTop: '2px solid rgba(255,255,255,0.1)',
@@ -1162,7 +1639,12 @@ const styles = {
   statSmall: {
     display: 'flex',
     alignItems: 'center',
-    gap: '5px'
+    gap: '5px',
+    background: 'rgba(255,255,255,0.03)',
+    padding: '4px 10px',
+    borderRadius: '10px',
+    flex: 1,
+    minWidth: '110px'
   },
   // Server View Styles
   serverView: {
@@ -1181,7 +1663,8 @@ const styles = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    borderBottom: '1px solid rgba(66, 133, 244, 0.2)'
+    borderBottom: '1px solid rgba(66, 133, 244, 0.2)',
+    flexShrink: 0
   },
   headerLeft: {
     display: 'flex',
@@ -1206,7 +1689,8 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
-    transition: 'all 0.2s ease'
+    transition: 'all 0.2s ease',
+    flexShrink: 0
   },
   serverInfo: {
     flex: 1
@@ -1215,18 +1699,41 @@ const styles = {
     margin: 0,
     fontSize: '24px',
     color: '#fff',
-    fontWeight: '700'
+    fontWeight: '700',
+    lineHeight: '1.2'
   },
   serverDesc: {
     margin: '5px 0 0',
     color: '#ccc',
     fontSize: '14px',
-    maxWidth: '600px'
+    maxWidth: '600px',
+    lineHeight: '1.4'
+  },
+  serverMeta: {
+    display: 'flex',
+    gap: '15px',
+    marginTop: '10px'
+  },
+  serverCategory: {
+    background: 'rgba(255, 193, 7, 0.15)',
+    color: '#ffc107',
+    padding: '4px 10px',
+    borderRadius: '10px',
+    fontSize: '12px',
+    fontWeight: '600'
+  },
+  serverOwner: {
+    color: '#888',
+    fontSize: '13px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '5px'
   },
   serverStats: {
     display: 'flex',
-    gap: '15px',
-    alignItems: 'center'
+    gap: '10px',
+    alignItems: 'center',
+    flexWrap: 'wrap'
   },
   statItem: {
     padding: '6px 12px',
@@ -1235,7 +1742,9 @@ const styles = {
     fontWeight: '600',
     display: 'flex',
     alignItems: 'center',
-    gap: '5px'
+    gap: '5px',
+    background: 'rgba(255,255,255,0.05)',
+    border: '1px solid rgba(255,255,255,0.1)'
   },
   refreshButton: {
     background: 'rgba(66, 133, 244, 0.1)',
@@ -1249,7 +1758,8 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    transition: 'all 0.2s ease'
+    transition: 'all 0.2s ease',
+    flexShrink: 0
   },
   warningBox: {
     background: 'rgba(220, 53, 69, 0.1)',
@@ -1262,12 +1772,37 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: '10px'
+    gap: '10px',
+    flexShrink: 0
   },
-  contentArea: {
+  mainContentArea: {
+    display: 'flex',
     flex: 1,
+    overflow: 'hidden'
+  },
+  leftColumn: {
+    flex: 3,
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden'
+  },
+  rightColumn: {
+    flex: 1,
+    background: 'rgba(26, 26, 26, 0.5)',
+    borderLeft: '1px solid rgba(66, 133, 244, 0.1)',
+    padding: '20px',
+    overflow: 'auto',
+    minWidth: '300px'
+  },
+  iframeContainer: {
+    flex: 3,
     position: 'relative',
     overflow: 'hidden'
+  },
+  iframeWrapper: {
+    width: '100%',
+    height: '100%',
+    position: 'relative'
   },
   loadingContainer: {
     position: 'absolute',
@@ -1303,11 +1838,6 @@ const styles = {
     fontSize: '18px',
     fontWeight: '600'
   },
-  iframeContainer: {
-    width: '100%',
-    height: '100%',
-    position: 'relative'
-  },
   serverIframe: {
     width: '100%',
     height: '100%',
@@ -1315,11 +1845,13 @@ const styles = {
     background: 'white'
   },
   fileList: {
+    flex: 1,
     background: 'rgba(26, 26, 26, 0.8)',
     borderTop: '1px solid rgba(255,255,255,0.1)',
-    padding: '20px 30px',
-    maxHeight: '200px',
-    overflowY: 'auto'
+    padding: '20px',
+    overflowY: 'auto',
+    minHeight: '200px',
+    maxHeight: '300px'
   },
   fileListTitle: {
     margin: '0 0 15px 0',
@@ -1337,7 +1869,7 @@ const styles = {
     fontWeight: '400'
   },
   fileTree: {
-    fontFamily: 'monospace',
+    fontFamily: "'Fira Code', monospace",
     fontSize: '13px'
   },
   fileTreeItem: {
@@ -1369,10 +1901,14 @@ const styles = {
     paddingLeft: '10px'
   },
   fileIcon: {
-    fontSize: '14px'
+    fontSize: '14px',
+    width: '20px',
+    textAlign: 'center'
   },
   folderIcon: {
-    fontSize: '14px'
+    fontSize: '14px',
+    width: '20px',
+    textAlign: 'center'
   },
   fileName: {
     overflow: 'hidden',
@@ -1386,9 +1922,244 @@ const styles = {
     whiteSpace: 'nowrap',
     flex: 1
   },
+  versionTag: {
+    background: 'rgba(66, 133, 244, 0.2)',
+    color: '#8ab4f8',
+    padding: '2px 8px',
+    borderRadius: '8px',
+    fontSize: '10px',
+    fontWeight: '600',
+    border: '1px solid rgba(66, 133, 244, 0.3)'
+  },
   arrow: {
     fontSize: '10px',
-    marginLeft: 'auto'
+    marginLeft: 'auto',
+    transition: 'transform 0.2s ease'
+  },
+  // Versions Section
+  versionsSection: {
+    marginBottom: '30px'
+  },
+  versionsTitle: {
+    fontSize: '16px',
+    fontWeight: '600',
+    color: '#fff',
+    marginBottom: '15px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px'
+  },
+  versionsGrid: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px'
+  },
+  versionCard: {
+    background: 'rgba(255, 255, 255, 0.05)',
+    border: '1px solid rgba(66, 133, 244, 0.1)',
+    borderRadius: '10px',
+    padding: '15px',
+    transition: 'all 0.3s ease'
+  },
+  versionHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: '10px'
+  },
+  versionName: {
+    margin: 0,
+    fontSize: '14px',
+    fontWeight: '700',
+    color: '#fff'
+  },
+  versionNumber: {
+    background: 'rgba(66, 133, 244, 0.2)',
+    color: '#8ab4f8',
+    padding: '2px 8px',
+    borderRadius: '8px',
+    fontSize: '11px',
+    fontWeight: '600'
+  },
+  versionDesc: {
+    color: '#aaa',
+    fontSize: '13px',
+    lineHeight: '1.4',
+    marginBottom: '10px',
+    display: '-webkit-box',
+    WebkitLineClamp: 2,
+    WebkitBoxOrient: 'vertical',
+    overflow: 'hidden'
+  },
+  versionStats: {
+    display: 'flex',
+    gap: '10px',
+    marginBottom: '15px',
+    flexWrap: 'wrap'
+  },
+  versionStat: {
+    color: '#888',
+    fontSize: '12px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '5px'
+  },
+  downloadButton: {
+    background: 'linear-gradient(90deg, #4285f4, #34a853)',
+    color: 'white',
+    border: 'none',
+    padding: '8px 16px',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontWeight: '600',
+    fontSize: '13px',
+    width: '100%',
+    transition: 'all 0.3s ease'
+  },
+  // Comments Section
+  commentsSection: {
+    marginBottom: '30px'
+  },
+  commentsHeader: {
+    marginBottom: '15px'
+  },
+  commentsTitle: {
+    fontSize: '16px',
+    fontWeight: '600',
+    color: '#fff',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: '10px'
+  },
+  newCommentButton: {
+    background: 'rgba(66, 133, 244, 0.15)',
+    color: '#8ab4f8',
+    border: '1px solid rgba(66, 133, 244, 0.3)',
+    padding: '6px 12px',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontWeight: '600',
+    fontSize: '12px',
+    transition: 'all 0.3s ease'
+  },
+  commentForm: {
+    background: 'rgba(255, 255, 255, 0.05)',
+    border: '1px solid rgba(66, 133, 244, 0.2)',
+    borderRadius: '10px',
+    padding: '15px',
+    marginBottom: '20px',
+    overflow: 'hidden'
+  },
+  commentTextarea: {
+    width: '100%',
+    background: 'rgba(255, 255, 255, 0.03)',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+    borderRadius: '8px',
+    padding: '10px',
+    color: 'white',
+    fontFamily: "'Inter', sans-serif",
+    fontSize: '14px',
+    resize: 'vertical',
+    minHeight: '80px',
+    marginBottom: '10px',
+    boxSizing: 'border-box'
+  },
+  commentError: {
+    color: '#ff6b6b',
+    fontSize: '13px',
+    marginBottom: '10px',
+    padding: '5px 10px',
+    background: 'rgba(220, 53, 69, 0.1)',
+    borderRadius: '6px',
+    border: '1px solid rgba(220, 53, 69, 0.2)'
+  },
+  commentFormActions: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center'
+  },
+  submitCommentButton: {
+    background: 'linear-gradient(90deg, #4285f4, #34a853)',
+    color: 'white',
+    border: 'none',
+    padding: '8px 16px',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontWeight: '600',
+    fontSize: '13px',
+    transition: 'all 0.3s ease'
+  },
+  commentLength: {
+    color: '#888',
+    fontSize: '12px',
+    fontFamily: "'Fira Code', monospace"
+  },
+  commentsList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '15px',
+    maxHeight: '400px',
+    overflowY: 'auto'
+  },
+  commentCard: {
+    background: 'rgba(255, 255, 255, 0.03)',
+    border: '1px solid rgba(255, 255, 255, 0.05)',
+    borderRadius: '10px',
+    padding: '15px'
+  },
+  commentHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: '10px'
+  },
+  commentUser: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px'
+  },
+  commentAvatar: {
+    width: '32px',
+    height: '32px',
+    borderRadius: '50%',
+    objectFit: 'cover',
+    border: '2px solid rgba(66, 133, 244, 0.3)'
+  },
+  commentUsername: {
+    color: '#fff',
+    fontSize: '14px'
+  },
+  commentDate: {
+    color: '#888',
+    fontSize: '12px',
+    marginTop: '2px'
+  },
+  bugReportTag: {
+    background: 'rgba(220, 53, 69, 0.15)',
+    color: '#ff6b6b',
+    padding: '3px 8px',
+    borderRadius: '6px',
+    fontSize: '11px',
+    fontWeight: '600',
+    border: '1px solid rgba(220, 53, 69, 0.2)',
+    whiteSpace: 'nowrap'
+  },
+  commentContent: {
+    color: '#ddd',
+    fontSize: '14px',
+    lineHeight: '1.5',
+    whiteSpace: 'pre-wrap',
+    wordBreak: 'break-word'
+  },
+  noComments: {
+    textAlign: 'center',
+    color: '#888',
+    fontSize: '14px',
+    padding: '30px',
+    background: 'rgba(255, 255, 255, 0.03)',
+    borderRadius: '10px',
+    border: '1px dashed rgba(255, 255, 255, 0.1)'
   },
   // File Preview Modal
   previewOverlay: {
@@ -1423,13 +2194,26 @@ const styles = {
     borderBottom: '1px solid rgba(66, 133, 244, 0.2)',
     display: 'flex',
     justifyContent: 'space-between',
-    alignItems: 'center'
+    alignItems: 'center',
+    flexShrink: 0
   },
   previewTitle: {
     margin: 0,
     fontSize: '18px',
     color: '#fff',
-    fontWeight: '600'
+    fontWeight: '600',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px'
+  },
+  versionBadge: {
+    background: 'rgba(66, 133, 244, 0.2)',
+    color: '#8ab4f8',
+    padding: '2px 8px',
+    borderRadius: '8px',
+    fontSize: '12px',
+    fontWeight: '600',
+    border: '1px solid rgba(66, 133, 244, 0.3)'
   },
   closePreviewButton: {
     background: 'rgba(220, 53, 69, 0.2)',
@@ -1446,8 +2230,7 @@ const styles = {
   },
   previewContent: {
     flex: 1,
-    overflow: 'auto',
-    padding: '0'
+    overflow: 'auto'
   },
   codePreview: {
     margin: 0,
