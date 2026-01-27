@@ -1,4 +1,4 @@
-'use client';
+like this 'use client';
 
 import { useEffect, useState, useRef } from 'react';
 import Head from 'next/head';
@@ -943,7 +943,7 @@ export default function ExplorePage() {
               }
             : server
         ));
-        
+      };
         // If there's a file URL, trigger download
         if (data.download.file_url) {
           const link = document.createElement('a');
