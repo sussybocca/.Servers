@@ -794,67 +794,67 @@ export default function ExplorePage() {
   };
 
   const renderFileTree = (tree, path = '') => {
-    const entries = Object.entries(tree);
+  const entries = Object.entries(tree);
+  
+  return entries.map(([name, item]) => {
+    const fullPath = path ? `${path}/${name}` : `/${name}`;
     
-    return entries.map(([name, item]) => {
-      const fullPath = path ? `${path}/${name}` : `/${name}`;
+    if (item.isFile) {
+      return (
+        <motion.div
+          key={fullPath}
+          style={styles.fileTreeItem}
+          initial={{ opacity: 0, x: -10 }}
+          animate={{ opacity: 1, x: 0 }}
+          whileHover={{ backgroundColor: 'rgba(66, 133, 244, 0.1)' }}
+          onClick={() => viewFile(item)}
+        >
+          <span style={styles.fileIcon}>
+            {item.path.endsWith('.html') ? '🌐' : 
+             item.path.endsWith('.js') ? '📜' : 
+             item.path.endsWith('.css') ? '🎨' : 
+             item.path.endsWith('.json') ? '📋' : '📄'}
+          </span>
+          <span style={styles.fileName}>{name}</span>
+          {item.version_name && (
+            <span style={styles.versionTag}>v{item.version_name}</span>
+          )}
+        </motion.div>
+      );
+    } else {
+      const isExpanded = expandedFolders[fullPath];
+      const hasChildren = Object.keys(item).length > 0;
       
-      if (item.isFile) {
-        return (
+      return (
+        <div key={fullPath}>
           <motion.div
-            key={fullPath}
-            style={styles.fileTreeItem}
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
-            whileHover={{ backgroundColor: 'rgba(66, 133, 244, 0.1)' }}
-            onClick={() => viewFile(item)}
+            style={styles.folderItem}
+            whileHover={{ backgroundColor: 'rgba(255, 193, 7, 0.1)' }}
+            onClick={() => hasChildren && toggleFolder(fullPath)}
           >
-            <span style={styles.fileIcon}>
-              {item.path.endsWith('.html') ? '🌐' : 
-               item.path.endsWith('.js') ? '📜' : 
-               item.path.endsWith('.css') ? '🎨' : 
-               item.path.endsWith('.json') ? '📋' : '📄'}
+            <span style={styles.folderIcon}>
+              {hasChildren ? (isExpanded ? '📂' : '📁') : '📁'}
             </span>
-            <span style={styles.fileName}>{name}</span>
-            {item.version_name && (
-              <span style={styles.versionTag}>v{item.version_name}</span>
+            <span style={styles.folderName}>{name}</span>
+            {hasChildren && (
+              <motion.span
+                animate={{ rotate: isExpanded ? 90 : 0 }}
+                style={styles.arrow}
+              >
+                ▶
+              </motion.span>
             )}
           </motion.div>
-        );
-      } else {
-        const isExpanded = expandedFolders[fullPath];
-        const hasChildren = Object.keys(item).length > 0;
-        
-        return (
-          <div key={fullPath}>
-            <motion.div
-              style={styles.folderItem}
-              whileHover={{ backgroundColor: 'rgba(255, 193, 7, 0.1)' }}
-              onClick={() => hasChildren && toggleFolder(fullPath)}
-            >
-              <span style={styles.folderIcon}>
-                {hasChildren ? (isExpanded ? '📂' : '📁') : '📁'}
-              </span>
-              <span style={styles.folderName}>{name}</span>
-              {hasChildren && (
-                <motion.span
-                  animate={{ rotate: isExpanded ? 90 : 0 }}
-                  style={styles.arrow}
-                >
-                  ▶
-                </motion.span>
-              )}
-            </motion.div>
-            {isExpanded && hasChildren && (
-              <div style={styles.folderContent}>
-                {renderFileTree(item, fullPath)}
-              </div>
-            )}
-      </div>
-    );
+          {isExpanded && hasChildren && (
+            <div style={styles.folderContent}>
+              {renderFileTree(item, fullPath)}
+            </div>
+          )}
+        </div>
+      );
+    }
+  }); // <-- THIS CLOSING PARENTHESIS WAS MISSING
 };
-
-
   const postComment = async () => {
     if (!newComment.trim()) {
       setCommentError('Comment cannot be empty');
@@ -943,7 +943,7 @@ export default function ExplorePage() {
               }
             : server
         ));
-      };
+      
         // If there's a file URL, trigger download
         if (data.download.file_url) {
           const link = document.createElement('a');
