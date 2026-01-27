@@ -1,4 +1,4 @@
-// pages/api/server-files.js
+// pages/api/update-file.js
 import { createClient } from '@supabase/supabase-js';
 import { createHash } from 'crypto';
 
