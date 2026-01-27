@@ -60,10 +60,10 @@ export default async function handler(req, res) {
 
     const { serverId, version_id, path, content } = req.body;
     
-    if (!serverId || !path || !version_id) {
+    if (!serverId || !path) {
       return res.status(400).json({ 
         success: false, 
-        error: 'Server ID, Version ID and path are required' 
+        error: 'Server ID and path are required' 
       });
     }
 
@@ -81,30 +81,74 @@ export default async function handler(req, res) {
       });
     }
 
-    // Check if version exists and belongs to this server
-    const { data: version } = await supabase
-      .from('server_versions')
-      .select('id, server_id')
-      .eq('id', version_id)
-      .eq('server_id', serverId)
-      .single();
+    let actualVersionId = version_id;
     
-    if (!version) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Version not found or does not belong to this server' 
-      });
+    // If no version_id provided, create or get a default version
+    if (!actualVersionId) {
+      // Check if there's a default version for this server
+      const { data: existingVersions } = await supabase
+        .from('server_versions')
+        .select('id')
+        .eq('server_id', serverId)
+        .order('created_at', { ascending: true })
+        .limit(1);
+      
+      if (existingVersions && existingVersions.length > 0) {
+        // Use the first version
+        actualVersionId = existingVersions[0].id;
+      } else {
+        // Create a default version
+        const { data: newVersion, error: versionError } = await supabase
+          .from('server_versions')
+          .insert({
+            server_id: serverId,
+            version_name: 'Initial Version',
+            version_number: 'v1.0.0',
+            description: 'Default version',
+            is_published: false,
+            is_prerelease: false,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .select('id')
+          .single();
+        
+        if (versionError) {
+          console.error('Error creating default version:', versionError);
+          return res.status(500).json({ 
+            success: false, 
+            error: 'Failed to create default version' 
+          });
+        }
+        
+        actualVersionId = newVersion.id;
+      }
+    } else {
+      // Verify the provided version exists and belongs to this server
+      const { data: version } = await supabase
+        .from('server_versions')
+        .select('id, server_id')
+        .eq('id', actualVersionId)
+        .eq('server_id', serverId)
+        .single();
+      
+      if (!version) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Version not found or does not belong to this server' 
+        });
+      }
     }
 
     // Create a file hash for the content
     const fileHash = createHash('sha256').update(content || '').digest('hex');
     const fileSize = Buffer.byteLength(content || '', 'utf8');
     
-    // Save to version_files table (we need to create this)
+    // Save to version_files table
     const { data: existingVersionFile } = await supabase
       .from('version_files')
       .select('id')
-      .eq('version_id', version_id)
+      .eq('version_id', actualVersionId)
       .eq('path', path)
       .single();
 
@@ -129,7 +173,7 @@ export default async function handler(req, res) {
       const { data, error } = await supabase
         .from('version_files')
         .insert({
-          version_id: version_id,
+          version_id: actualVersionId,
           server_id: serverId,
           path,
           content: content || '',
@@ -155,7 +199,7 @@ export default async function handler(req, res) {
     const { data: versionFiles } = await supabase
       .from('version_files')
       .select('file_size, file_hash')
-      .eq('version_id', version_id);
+      .eq('version_id', actualVersionId);
     
     if (versionFiles && versionFiles.length > 0) {
       const totalSize = versionFiles.reduce((sum, file) => sum + (file.file_size || 0), 0);
@@ -173,13 +217,14 @@ export default async function handler(req, res) {
           file_hash: combinedHash,
           updated_at: new Date().toISOString()
         })
-        .eq('id', version_id);
+        .eq('id', actualVersionId);
     }
 
     res.status(200).json({ 
       success: true, 
-      message: 'File saved to version successfully',
-      version_id: version_id
+      message: 'File saved successfully',
+      version_id: actualVersionId,
+      file_path: path
     });
   } catch (error) {
     console.error('Error:', error);
