@@ -1,10 +1,11 @@
- 'use client';
+'use client';
 
 import { useEffect, useState, useRef } from 'react';
 import Head from 'next/head';
 import { motion, AnimatePresence } from 'framer-motion';
 import Tilt from 'react-parallax-tilt';
 import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 
 export default function ExplorePage() {
   const [servers, setServers] = useState([]);
@@ -29,6 +30,9 @@ export default function ExplorePage() {
   const [commentError, setCommentError] = useState('');
   const [showImmersiveView, setShowImmersiveView] = useState(false);
   const [immersiveLoading, setImmersiveLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState('preview');
+  const [iframeLoading, setIframeLoading] = useState(true);
+  const [autoRefresh, setAutoRefresh] = useState(false);
   const warningAccepted = useRef(false);
   
   // Three.js refs
@@ -40,13 +44,15 @@ export default function ExplorePage() {
   const animationRef = useRef(null);
   const serverObjectsRef = useRef([]);
   const particlesRef = useRef([]);
+  const fileNodesRef = useRef([]);
+  const raycastRef = useRef(new THREE.Raycaster());
+  const mouseRef = useRef(new THREE.Vector2());
 
   useEffect(() => {
     loadUser();
     loadServers();
     
     return () => {
-      // Cleanup Three.js
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
       }
@@ -78,662 +84,254 @@ export default function ExplorePage() {
     }
   };
 
-  // Initialize Three.js immersive view
-  const initImmersiveView = () => {
-    if (!threeContainerRef.current || !currentServer) return;
-
-    setImmersiveLoading(true);
-    
-    // Scene
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0a0a0a);
-    scene.fog = new THREE.Fog(0x0a0a0a, 1, 1000);
-    threeSceneRef.current = scene;
-
-    // Camera
-    const camera = new THREE.PerspectiveCamera(
-      75,
-      threeContainerRef.current.clientWidth / threeContainerRef.current.clientHeight,
-      0.1,
-      1000
-    );
-    camera.position.set(0, 5, 15);
-    threeCameraRef.current = camera;
-
-    // Renderer
-    const renderer = new THREE.WebGLRenderer({ 
-      antialias: true,
-      alpha: true 
-    });
-    renderer.setSize(
-      threeContainerRef.current.clientWidth,
-      threeContainerRef.current.clientHeight
-    );
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    threeContainerRef.current.appendChild(renderer.domElement);
-    threeRendererRef.current = renderer;
-
-    // Lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
-    scene.add(ambientLight);
-
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    directionalLight.position.set(10, 20, 15);
-    directionalLight.castShadow = true;
-    directionalLight.shadow.mapSize.width = 2048;
-    directionalLight.shadow.mapSize.height = 2048;
-    scene.add(directionalLight);
-
-    const hemisphereLight = new THREE.HemisphereLight(0x4285f4, 0xea4335, 0.3);
-    scene.add(hemisphereLight);
-
-    // Create server data structure
-    createServerDataStructure(scene);
-
-    // Create particles
-    createParticles(scene);
-
-    // Add floating server name
-    createServerTitle(scene);
-
-    // Animation loop
-    const animate = () => {
-      animationRef.current = requestAnimationFrame(animate);
-      updateParticles();
-      updateServerObjects();
-      
-      if (threeControlsRef.current) {
-        threeControlsRef.current.update();
+  const fetchFilesFromFallback = async (serverId, versionId = null) => {
+    try {
+      let url = `/api/get-server-files?serverId=${serverId}`;
+      if (versionId) {
+        url += `&published=true&versionId=${versionId}`;
       }
       
-      renderer.render(scene, camera);
-    };
-    animate();
-
-    // Handle resize
-    const handleResize = () => {
-      if (!threeContainerRef.current || !camera || !renderer) return;
+      const response = await fetch(url);
+      const data = await response.json();
       
-      camera.aspect = threeContainerRef.current.clientWidth / threeContainerRef.current.clientHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(
-        threeContainerRef.current.clientWidth,
-        threeContainerRef.current.clientHeight
-      );
-    };
-    window.addEventListener('resize', handleResize);
-    
-    setImmersiveLoading(false);
-  };
-
-  const createServerDataStructure = (scene) => {
-    if (!currentServer) return;
-
-    // Clear previous objects
-    serverObjectsRef.current.forEach(obj => scene.remove(obj));
-    serverObjectsRef.current = [];
-
-    const server = currentServer;
-    
-    // Create central server core
-    const coreGeometry = new THREE.SphereGeometry(2, 32, 32);
-    const coreMaterial = new THREE.MeshPhongMaterial({
-      color: 0x4285f4,
-      shininess: 100,
-      emissive: 0x4285f4,
-      emissiveIntensity: 0.3,
-      transparent: true,
-      opacity: 0.8
-    });
-    const core = new THREE.Mesh(coreGeometry, coreMaterial);
-    core.castShadow = true;
-    core.receiveShadow = true;
-    scene.add(core);
-    serverObjectsRef.current.push(core);
-
-    // Create orbiting data nodes for files
-    const fileCount = Math.min(serverFiles.length, 30); // Limit to 30 nodes
-    for (let i = 0; i < fileCount; i++) {
-      const file = serverFiles[i];
-      const angle = (i / fileCount) * Math.PI * 2;
-      const radius = 5 + (i % 3) * 1.5;
-      const height = Math.sin(i * 0.3) * 3;
-
-      const nodeGeometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
-      const nodeMaterial = new THREE.MeshPhongMaterial({
-        color: file.path.endsWith('.html') ? 0xff6b6b : 
-               file.path.endsWith('.js') ? 0x4285f4 : 
-               file.path.endsWith('.css') ? 0x34a853 : 0xfbbc05,
-        emissive: file.path.endsWith('.html') ? 0xff6b6b : 
-                 file.path.endsWith('.js') ? 0x4285f4 : 
-                 file.path.endsWith('.css') ? 0x34a853 : 0xfbbc05,
-        emissiveIntensity: 0.2,
-        transparent: true,
-        opacity: 0.9
-      });
-      
-      const node = new THREE.Mesh(nodeGeometry, nodeMaterial);
-      node.position.set(
-        Math.cos(angle) * radius,
-        height,
-        Math.sin(angle) * radius
-      );
-      node.castShadow = true;
-      node.receiveShadow = true;
-      
-      // Store animation properties
-      node.userData = {
-        angle: angle,
-        radius: radius,
-        height: height,
-        speed: 0.5 + Math.random() * 0.5,
-        offset: Math.random() * Math.PI * 2,
-        isFile: true,
-        fileInfo: file
-      };
-      
-      scene.add(node);
-      serverObjectsRef.current.push(node);
-
-      // Add connecting lines to core
-      const lineGeometry = new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(0, 0, 0),
-        node.position
-      ]);
-      const lineMaterial = new THREE.LineBasicMaterial({
-        color: 0x4285f4,
-        transparent: true,
-        opacity: 0.3,
-        linewidth: 1
-      });
-      const line = new THREE.Line(lineGeometry, lineMaterial);
-      scene.add(line);
-      serverObjectsRef.current.push(line);
-    }
-
-    // Create version rings
-    const versionCount = Math.min(serverVersions.length, 5);
-    for (let i = 0; i < versionCount; i++) {
-      const version = serverVersions[i];
-      const ringRadius = 8 + i * 1.5;
-      
-      const ringGeometry = new THREE.TorusGeometry(ringRadius, 0.1, 16, 100);
-      const ringMaterial = new THREE.MeshBasicMaterial({
-        color: i === 0 ? 0x34a853 : 0x8ab4f8,
-        transparent: true,
-        opacity: 0.2,
-        side: THREE.DoubleSide
-      });
-      const ring = new THREE.Mesh(ringGeometry, ringMaterial);
-      ring.rotation.x = Math.PI / 2;
-      scene.add(ring);
-      serverObjectsRef.current.push(ring);
-
-      // Add version info text (using sprites)
-      createVersionLabel(scene, version, ringRadius);
-    }
-  };
-
-  const createParticles = (scene) => {
-    const particleCount = 1000;
-    const particles = new THREE.BufferGeometry();
-    const positions = new Float32Array(particleCount * 3);
-    const colors = new Float32Array(particleCount * 3);
-
-    for (let i = 0; i < particleCount; i++) {
-      const i3 = i * 3;
-      
-      // Random positions in a sphere
-      const radius = 15 + Math.random() * 10;
-      const theta = Math.random() * Math.PI * 2;
-      const phi = Math.acos(2 * Math.random() - 1);
-      
-      positions[i3] = radius * Math.sin(phi) * Math.cos(theta);
-      positions[i3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
-      positions[i3 + 2] = radius * Math.cos(phi);
-      
-      // Random colors
-      colors[i3] = Math.random() * 0.5 + 0.5; // R
-      colors[i3 + 1] = Math.random() * 0.3 + 0.7; // G
-      colors[i3 + 2] = Math.random() * 0.5 + 0.5; // B
-    }
-
-    particles.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    particles.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-
-    const particleMaterial = new THREE.PointsMaterial({
-      size: 0.1,
-      vertexColors: true,
-      transparent: true,
-      opacity: 0.6,
-      blending: THREE.AdditiveBlending
-    });
-
-    const particleSystem = new THREE.Points(particles, particleMaterial);
-    scene.add(particleSystem);
-    particlesRef.current.push(particleSystem);
-  };
-
-  const createServerTitle = (scene) => {
-    if (!currentServer) return;
-
-    // Create a canvas for text
-    const canvas = document.createElement('canvas');
-    const context = canvas.getContext('2d');
-    canvas.width = 1024;
-    canvas.height = 256;
-    
-    context.fillStyle = '#0a0a0a';
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    
-    context.font = 'bold 80px Arial';
-    context.fillStyle = '#ffffff';
-    context.textAlign = 'center';
-    context.textBaseline = 'middle';
-    context.fillText(currentServer.name, canvas.width / 2, canvas.height / 2);
-
-    const texture = new THREE.CanvasTexture(canvas);
-    const spriteMaterial = new THREE.SpriteMaterial({
-      map: texture,
-      transparent: true,
-      opacity: 0.8
-    });
-    
-    const sprite = new THREE.Sprite(spriteMaterial);
-    sprite.position.set(0, 10, 0);
-    sprite.scale.set(10, 2.5, 1);
-    scene.add(sprite);
-    serverObjectsRef.current.push(sprite);
-  };
-
-  const createVersionLabel = (scene, version, radius) => {
-    const canvas = document.createElement('canvas');
-    const context = canvas.getContext('2d');
-    canvas.width = 512;
-    canvas.height = 128;
-    
-    context.fillStyle = 'rgba(10, 10, 10, 0.8)';
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    
-    context.font = 'bold 24px Arial';
-    context.fillStyle = '#ffffff';
-    context.textAlign = 'center';
-    context.textBaseline = 'middle';
-    context.fillText(`v${version.version_number}`, canvas.width / 2, canvas.height / 2 - 15);
-    
-    context.font = '16px Arial';
-    context.fillStyle = '#aaaaaa';
-    context.fillText(version.version_name, canvas.width / 2, canvas.height / 2 + 15);
-
-    const texture = new THREE.CanvasTexture(canvas);
-    const spriteMaterial = new THREE.SpriteMaterial({
-      map: texture,
-      transparent: true,
-      opacity: 0.9
-    });
-    
-    const sprite = new THREE.Sprite(spriteMaterial);
-    const angle = Math.random() * Math.PI * 2;
-    sprite.position.set(
-      Math.cos(angle) * radius,
-      0,
-      Math.sin(angle) * radius
-    );
-    sprite.scale.set(3, 0.75, 1);
-    
-    // Make sprite face camera
-    sprite.lookAt(0, 0, 0);
-    
-    scene.add(sprite);
-    serverObjectsRef.current.push(sprite);
-  };
-
-  const updateParticles = () => {
-    particlesRef.current.forEach(particleSystem => {
-      const positions = particleSystem.geometry.attributes.position.array;
-      const time = Date.now() * 0.0001;
-      
-      for (let i = 0; i < positions.length; i += 3) {
-        positions[i] += Math.sin(time + i) * 0.01;
-        positions[i + 1] += Math.cos(time + i) * 0.01;
-        positions[i + 2] += Math.sin(time + i * 0.5) * 0.01;
+      if (data.success && data.files && data.files.length > 0) {
+        console.log(`Fallback fetched ${data.files.length} files`);
+        return data.files.map(file => ({
+          ...file,
+          path: file.path || file.name,
+          content: file.content,
+          version_id: versionId,
+          version_name: versionId ? 'v' + versionId : 'current'
+        }));
       }
-      
-      particleSystem.geometry.attributes.position.needsUpdate = true;
-    });
-  };
-
-  const updateServerObjects = () => {
-    const time = Date.now() * 0.001;
-    
-    serverObjectsRef.current.forEach(obj => {
-      if (obj.userData?.isFile) {
-        // Animate orbiting files
-        const { angle, radius, height, speed, offset } = obj.userData;
-        const newAngle = angle + time * 0.1 * speed + offset;
-        
-        obj.position.x = Math.cos(newAngle) * radius;
-        obj.position.y = height + Math.sin(time + offset) * 0.5;
-        obj.position.z = Math.sin(newAngle) * radius;
-        
-        // Gentle rotation
-        obj.rotation.x += 0.01;
-        obj.rotation.y += 0.02;
-      }
-    });
-  };
-
-  const enterImmersiveView = () => {
-    if (!currentServer) return;
-    
-    setShowImmersiveView(true);
-    // Initialize Three.js on next tick
-    setTimeout(() => {
-      if (threeContainerRef.current) {
-        initImmersiveView();
-      }
-    }, 100);
-  };
-
-  const exitImmersiveView = () => {
-    setShowImmersiveView(false);
-    
-    // Clean up Three.js
-    if (animationRef.current) {
-      cancelAnimationFrame(animationRef.current);
-      animationRef.current = null;
+    } catch (error) {
+      console.error('Error fetching from fallback:', error);
     }
+    return [];
+  };
+
+  const collectAllFiles = async (serverData) => {
+    const allFiles = [];
+    const fileMap = new Map();
     
-    if (threeRendererRef.current && threeContainerRef.current) {
-      threeContainerRef.current.removeChild(threeRendererRef.current.domElement);
-      threeRendererRef.current.dispose();
-      threeRendererRef.current = null;
-    }
-    
-    threeSceneRef.current = null;
-    threeCameraRef.current = null;
-    threeControlsRef.current = null;
-    serverObjectsRef.current = [];
-    particlesRef.current = [];
-  };
-
-  const getFeaturedServers = () => {
-    return servers.filter(server => server.is_public && (server.stats?.total_downloads > 100 || server.comment_count > 20))
-      .sort((a, b) => {
-        const aScore = (a.stats?.total_downloads || 0) + (a.comment_count || 0);
-        const bScore = (b.stats?.total_downloads || 0) + (b.comment_count || 0);
-        return bScore - aScore;
-      })
-      .slice(0, 6);
-  };
-
-  const getTrendingServers = () => {
-    return servers.filter(server => server.is_public)
-      .sort((a, b) => {
-        const aScore = (a.comment_count || 0) * 2 + (a.stats?.total_downloads || 0);
-        const bScore = (b.comment_count || 0) * 2 + (b.stats?.total_downloads || 0);
-        return bScore - aScore;
-      })
-      .slice(0, 8);
-  };
-
-  const getRecentlyUpdated = () => {
-    return servers.filter(server => server.is_public)
-      .sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at))
-      .slice(0, 6);
-  };
-
-  const getFilteredServers = () => {
-    switch (viewMode) {
-      case 'featured':
-        return getFeaturedServers();
-      case 'trending':
-        return getTrendingServers();
-      case 'recent':
-        return getRecentlyUpdated();
-      default:
-        return servers.filter(server => server.is_public || (user && (server.owner_id === user.id || server.user_permissions?.is_member)));
-    }
-  };
-
-  const getServerTags = (server) => {
-    const tags = [];
-    if (server.category) tags.push(server.category);
-    if (server.latest_version) tags.push(`v${server.latest_version.version_number}`);
-    if (server.total_downloads > 100) tags.push('🔥 Popular');
-    if (server.comment_count > 10) tags.push('💬 Active');
-    return tags.slice(0, 3);
-  };
-
- const enterServer = async (serverId) => {
-  if (!warningAccepted.current) {
-    alert("Please acknowledge the security warning first.");
-    setShowWarning(true);
-    return;
-  }
-
-  setLoadingServer(true);
-  setSelectedServer(serverId);
-  setSelectedFile(null);
-  setFilePreview('');
-  setExpandedFolders({});
-  setServerVersions([]);
-  setServerComments([]);
-  setServerStats(null);
-  setServerMembers([]);
-  setShowCommentForm(false);
-  setNewComment('');
-  setShowImmersiveView(false);
-  
-  try {
-    // Load comprehensive server data including files
-    const serverRes = await fetch(`/api/get-server?serverId=${serverId}&includeVersions=true&includeComments=true&includeStats=true&includeMembers=true&includeFiles=true`);
-    const serverData = await serverRes.json();
-    
-    console.log('Server data received:', {
-      serverData,
-      hasVersions: !!serverData.versions,
-      versionCount: serverData.versions?.length || 0,
-      firstVersion: serverData.versions?.[0],
-      filesInResponse: serverData.files,
-      filesInFirstVersion: serverData.versions?.[0]?.files
-    });
-    
-    if (serverData.success) {
-      const currentServer = serverData.server;
-      
-      // Update servers list with latest data
-      setServers(prev => prev.map(s => s.id === serverId ? { ...s, ...currentServer } : s));
-      
-      // Set versions
-      if (serverData.versions) {
-        setServerVersions(serverData.versions);
-        
-        // COLLECT FILES - MULTIPLE APPROACHES WITH FALLBACK
-        const allFiles = [];
-        
-        // APPROACH 1: Files might be at root level (serverData.files)
-        if (serverData.files && serverData.files.length > 0) {
-          console.log('Found files at root level:', serverData.files.length);
-          serverData.files.forEach(file => {
-            allFiles.push({
-              ...file,
-              path: file.path || file.name,
-              version_id: file.version_id,
-              version_name: serverData.versions.find(v => v.id === file.version_id)?.version_name || 'unknown'
-            });
-          });
-        }
-        
-        // APPROACH 2: Files might be nested in versions (version.files)
-        serverData.versions.forEach(version => {
-          if (version.files && version.files.length > 0) {
-            console.log(`Found ${version.files.length} files in version ${version.version_name}`);
-            version.files.forEach(file => {
-              allFiles.push({
-                ...file,
-                path: file.path || file.name,
-                version_id: version.id,
-                version_name: version.version_name
-              });
-            });
-          }
+    const addFile = (file, source) => {
+      const key = `${file.path}-${file.version_id || 'current'}`;
+      if (!fileMap.has(key)) {
+        fileMap.set(key, {
+          ...file,
+          path: file.path || file.name,
+          source: source,
+          content: file.content
         });
-        
-        // APPROACH 3: Files might be in version_files table (separate from versions array)
-        if (serverData.version_files && serverData.version_files.length > 0) {
-          console.log('Found version_files:', serverData.version_files.length);
-          serverData.version_files.forEach(file => {
-            allFiles.push({
-              ...file,
-              path: file.path,
-              content: file.content,
-              version_id: file.version_id,
-              version_name: serverData.versions.find(v => v.id === file.version_id)?.version_name || 'unknown'
-            });
-          });
-        }
-        
-        // FALLBACK APPROACH 4: Use the dedicated get-server-files API
-        if (allFiles.length === 0) {
-          console.log('No files found in primary sources, trying fallback API...');
-          
-          // Try to get files from specific version first (if there's a latest version)
-          const latestVersion = serverData.versions?.[0];
-          if (latestVersion) {
-            console.log('Trying to fetch from latest version:', latestVersion.id);
-            const fallbackRes = await fetch(`/api/get-server-files?serverId=${serverId}&published=true&versionId=${latestVersion.id}`);
-            const fallbackData = await fallbackRes.json();
-            
-            if (fallbackData.success && fallbackData.files && fallbackData.files.length > 0) {
-              console.log(`Fallback found ${fallbackData.files.length} files from version ${latestVersion.id}`);
-              fallbackData.files.forEach(file => {
-                allFiles.push({
-                  ...file,
-                  path: file.path,
-                  content: file.content,
-                  version_id: latestVersion.id,
-                  version_name: latestVersion.version_name,
-                  source: 'fallback-version'
-                });
-              });
-            } else {
-              // Try to get current working files as final fallback
-              console.log('Trying to fetch current working files...');
-              const currentRes = await fetch(`/api/get-server-files?serverId=${serverId}`);
-              const currentData = await currentRes.json();
-              
-              if (currentData.success && currentData.files && currentData.files.length > 0) {
-                console.log(`Fallback found ${currentData.files.length} current working files`);
-                currentData.files.forEach(file => {
-                  allFiles.push({
-                    ...file,
-                    path: file.path,
-                    content: file.content,
-                    version_id: null,
-                    version_name: 'current',
-                    source: 'fallback-current'
-                  });
-                });
-              }
-            }
-          } else {
-            // No versions, try current files directly
-            console.log('No versions found, trying current working files...');
-            const currentRes = await fetch(`/api/get-server-files?serverId=${serverId}`);
-            const currentData = await currentRes.json();
-            
-            if (currentData.success && currentData.files && currentData.files.length > 0) {
-              console.log(`Fallback found ${currentData.files.length} current working files`);
-              currentData.files.forEach(file => {
-                allFiles.push({
-                  ...file,
-                  path: file.path,
-                  content: file.content,
-                  version_id: null,
-                  version_name: 'current',
-                  source: 'fallback-current'
-                });
-              });
-            }
-          }
-        }
-        
-        console.log('Total files collected after fallback:', allFiles.length, allFiles);
-        setServerFiles(allFiles);
-        
-        // FIND AND SET CONTENT - MULTIPLE ATTEMPTS
-        let foundContent = false;
-        
-        // Try index.html first
-        const indexFile = allFiles.find(f => 
-          f.path && (
-            f.path === '/index.html' || 
-            f.path.endsWith('/index.html') || 
-            f.path === 'index.html' ||
-            f.path.includes('index.html') ||
-            f.name === 'index.html'
-          )
-        );
-        
-        if (indexFile && indexFile.content) {
-          console.log('Found index.html:', indexFile.path);
-          setServerContent(indexFile.content);
-          foundContent = true;
-        }
-        
-        // Try any HTML file if no index.html found
-        if (!foundContent && allFiles.length > 0) {
-          const firstHtml = allFiles.find(f => 
-            f.path && (f.path.endsWith('.html') || f.name?.endsWith('.html'))
-          );
-          
-          if (firstHtml && firstHtml.content) {
-            console.log('Found HTML file:', firstHtml.path);
-            setServerContent(firstHtml.content);
-            foundContent = true;
-          }
-        }
-        
-        // Generate default page if no content found
-        if (!foundContent) {
-          console.log('No content found, generating default page');
-          setServerContent(generateDefaultPage(currentServer, serverData.versions[0]));
-        }
-      } else {
-        console.log('No versions found, generating default page');
-        setServerContent(generateDefaultPage(currentServer, null));
       }
-      
-      // Set comments
-      if (serverData.comments) {
-        setServerComments(serverData.comments);
-      }
-      
-      // Set stats
-      if (serverData.stats) {
-        setServerStats(serverData.stats);
-      }
-      
-      // Set members
-      if (serverData.members) {
-        setServerMembers(serverData.members);
-      }
-    } else {
-      console.error('Server API error:', serverData.error);
-      setServerContent(generateErrorPage());
+    };
+
+    if (serverData.files && serverData.files.length > 0) {
+      serverData.files.forEach(file => addFile(file, 'root'));
     }
+
+    if (serverData.versions) {
+      for (const version of serverData.versions) {
+        if (version.files && version.files.length > 0) {
+          version.files.forEach(file => addFile({
+            ...file,
+            version_id: version.id,
+            version_name: version.version_name
+          }, 'version-nested'));
+        }
+      }
+    }
+
+    if (serverData.version_files && serverData.version_files.length > 0) {
+      serverData.version_files.forEach(file => addFile(file, 'version-files'));
+    }
+
+    if (fileMap.size === 0 && serverData.versions && serverData.versions.length > 0) {
+      const latestVersion = serverData.versions[0];
+      const fallbackFiles = await fetchFilesFromFallback(serverData.server.id, latestVersion.id);
+      fallbackFiles.forEach(file => addFile(file, 'fallback-version'));
+      
+      if (fallbackFiles.length === 0) {
+        const currentFiles = await fetchFilesFromFallback(serverData.server.id);
+        currentFiles.forEach(file => addFile(file, 'fallback-current'));
+      }
+    }
+
+    return Array.from(fileMap.values());
+  };
+
+  const findAndSetContent = (files, currentServer, latestVersion) => {
+    const indexFile = files.find(f => 
+      f.path && f.path.toLowerCase().includes('index.html')
+    );
     
-  } catch (error) {
-    console.error('Failed to load server:', error);
-    setServerContent(generateErrorPage());
-  } finally {
-    setLoadingServer(false);
-    setIframeKey(prev => prev + 1);
-  }
-};
+    if (indexFile && indexFile.content) {
+      console.log('Found index.html:', indexFile.path);
+      return indexFile.content;
+    }
+
+    const htmlFile = files.find(f => 
+      f.path && f.path.toLowerCase().endsWith('.html')
+    );
+    
+    if (htmlFile && htmlFile.content) {
+      console.log('Found HTML file:', htmlFile.path);
+      return htmlFile.content;
+    }
+
+    if (files.length > 0) {
+      return generateFileBrowserPage(currentServer, files, latestVersion);
+    }
+
+    return generateDefaultPage(currentServer, latestVersion);
+  };
+
+  const generateFileBrowserPage = (server, files, latestVersion) => {
+    const fileList = files.map(file => `
+      <div class="file-item">
+        <span class="file-icon">${getFileIcon(file.path)}</span>
+        <span class="file-name">${file.path.split('/').pop()}</span>
+        <span class="file-size">${(file.content?.length || 0)} bytes</span>
+        <span class="file-version">${file.version_name || 'current'}</span>
+      </div>
+    `).join('');
+
+    return `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>${server.name} - File Browser</title>
+          <style>
+            body {
+              margin: 0;
+              padding: 40px;
+              background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+              color: white;
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+              min-height: 100vh;
+            }
+            .container {
+              max-width: 1200px;
+              margin: 0 auto;
+            }
+            .header {
+              text-align: center;
+              margin-bottom: 40px;
+            }
+            .server-name {
+              font-size: 2.5em;
+              margin-bottom: 10px;
+              background: linear-gradient(90deg, #4285f4, #34a853);
+              -webkit-background-clip: text;
+              -webkit-text-fill-color: transparent;
+            }
+            .file-browser {
+              background: rgba(255,255,255,0.05);
+              border-radius: 15px;
+              padding: 30px;
+              backdrop-filter: blur(10px);
+            }
+            .file-header {
+              display: grid;
+              grid-template-columns: 40px 1fr 100px 100px;
+              gap: 20px;
+              padding: 15px;
+              border-bottom: 2px solid rgba(255,255,255,0.1);
+              font-weight: bold;
+              color: #aaa;
+            }
+            .file-item {
+              display: grid;
+              grid-template-columns: 40px 1fr 100px 100px;
+              gap: 20px;
+              padding: 15px;
+              border-bottom: 1px solid rgba(255,255,255,0.05);
+              transition: background 0.2s;
+            }
+            .file-item:hover {
+              background: rgba(66, 133, 244, 0.1);
+            }
+            .file-icon {
+              font-size: 20px;
+            }
+            .stats {
+              display: flex;
+              gap: 20px;
+              margin-top: 30px;
+              justify-content: center;
+              flex-wrap: wrap;
+            }
+            .stat {
+              background: rgba(255,255,255,0.1);
+              padding: 15px 25px;
+              border-radius: 10px;
+              min-width: 150px;
+              text-align: center;
+            }
+            .stat-value {
+              font-size: 1.5em;
+              font-weight: bold;
+              color: #4285f4;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1 class="server-name">${server.name}</h1>
+              <p>${server.description || 'Browse server files'}</p>
+            </div>
+            
+            <div class="file-browser">
+              <div class="file-header">
+                <div>Icon</div>
+                <div>File Name</div>
+                <div>Size</div>
+                <div>Version</div>
+              </div>
+              ${fileList}
+            </div>
+            
+            <div class="stats">
+              <div class="stat">
+                <div class="stat-value">${files.length}</div>
+                <div>Total Files</div>
+              </div>
+              ${latestVersion ? `
+                <div class="stat">
+                  <div class="stat-value">v${latestVersion.version_number}</div>
+                  <div>Latest Version</div>
+                </div>
+              ` : ''}
+              <div class="stat">
+                <div class="stat-value">${new Date().toLocaleDateString()}</div>
+                <div>Last Updated</div>
+              </div>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+  };
+
+  const getFileIcon = (path) => {
+    const ext = path.split('.').pop().toLowerCase();
+    switch (ext) {
+      case 'html': return '🌐';
+      case 'js': return '📜';
+      case 'css': return '🎨';
+      case 'json': return '📋';
+      case 'md': return '📝';
+      case 'txt': return '📄';
+      case 'png':
+      case 'jpg':
+      case 'jpeg':
+      case 'gif':
+      case 'svg': return '🖼️';
+      default: return '📁';
+    }
+  };
+
   const generateDefaultPage = (server, latestVersion) => {
     return `
       <!DOCTYPE html>
@@ -879,22 +477,613 @@ export default function ExplorePage() {
     `;
   };
 
-  const viewFile = (file) => {
-    setSelectedFile(file);
+  const enterServer = async (serverId) => {
+    if (!warningAccepted.current) {
+      alert("Please acknowledge the security warning first.");
+      setShowWarning(true);
+      return;
+    }
+
+    setLoadingServer(true);
+    setSelectedServer(serverId);
+    setSelectedFile(null);
+    setFilePreview('');
+    setExpandedFolders({});
+    setServerVersions([]);
+    setServerComments([]);
+    setServerStats(null);
+    setServerMembers([]);
+    setShowCommentForm(false);
+    setNewComment('');
+    setActiveTab('preview');
+    setIframeLoading(true);
     
-    let previewContent = '';
-    if (file.content) {
-      const ext = file.path.split('.').pop().toLowerCase();
-      if (['html', 'css', 'js', 'json', 'txt', 'md'].includes(ext)) {
-        previewContent = file.content;
+    try {
+      const serverRes = await fetch(`/api/get-server?serverId=${serverId}&includeVersions=true&includeComments=true&includeStats=true&includeMembers=true&includeFiles=true`);
+      const serverData = await serverRes.json();
+      
+      if (serverData.success) {
+        const currentServer = serverData.server;
+        
+        setServers(prev => prev.map(s => s.id === serverId ? { ...s, ...currentServer } : s));
+        
+        if (serverData.versions) {
+          setServerVersions(serverData.versions);
+        }
+        
+        const allFiles = await collectAllFiles(serverData);
+        setServerFiles(allFiles);
+        
+        const latestVersion = serverData.versions?.[0];
+        const content = findAndSetContent(allFiles, currentServer, latestVersion);
+        setServerContent(content);
+        
+        if (serverData.comments) setServerComments(serverData.comments);
+        if (serverData.stats) setServerStats(serverData.stats);
+        if (serverData.members) setServerMembers(serverData.members);
+        
       } else {
-        previewContent = `// Binary or unsupported file type: ${file.path}\n// File size: ${file.content.length} bytes\n// From version: ${file.version_name}`;
+        console.error('Server API error:', serverData.error);
+        setServerContent(generateErrorPage());
       }
-    } else {
-      previewContent = `// No content available for this file\n// Path: ${file.path}\n// Version: ${file.version_name}`;
+      
+    } catch (error) {
+      console.error('Failed to load server:', error);
+      setServerContent(generateErrorPage());
+    } finally {
+      setLoadingServer(false);
+      setIframeKey(prev => prev + 1);
+    }
+  };
+
+  const initImmersiveView = () => {
+    if (!threeContainerRef.current || !currentServer) return;
+
+    setImmersiveLoading(true);
+    
+    if (threeRendererRef.current) {
+      threeContainerRef.current.removeChild(threeRendererRef.current.domElement);
+    }
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0a0a0a);
+    scene.fog = new THREE.Fog(0x0a0a0a, 1, 1000);
+    threeSceneRef.current = scene;
+
+    const camera = new THREE.PerspectiveCamera(
+      75,
+      threeContainerRef.current.clientWidth / threeContainerRef.current.clientHeight,
+      0.1,
+      1000
+    );
+    camera.position.set(0, 5, 15);
+    threeCameraRef.current = camera;
+
+    const renderer = new THREE.WebGLRenderer({ 
+      antialias: true,
+      alpha: true 
+    });
+    renderer.setSize(
+      threeContainerRef.current.clientWidth,
+      threeContainerRef.current.clientHeight
+    );
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    threeContainerRef.current.appendChild(renderer.domElement);
+    threeRendererRef.current = renderer;
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.minDistance = 5;
+    controls.maxDistance = 50;
+    threeControlsRef.current = controls;
+
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+    scene.add(ambientLight);
+
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    directionalLight.position.set(10, 20, 15);
+    directionalLight.castShadow = true;
+    scene.add(directionalLight);
+
+    const hemisphereLight = new THREE.HemisphereLight(0x4285f4, 0xea4335, 0.3);
+    scene.add(hemisphereLight);
+
+    createServerDataStructure(scene);
+    createParticles(scene);
+    createInfoPanels(scene);
+    createServerTitle(scene);
+
+    const handleClick = (event) => {
+      if (!threeCameraRef.current || !threeSceneRef.current) return;
+      
+      const rect = threeContainerRef.current.getBoundingClientRect();
+      mouseRef.current.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      mouseRef.current.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      
+      raycastRef.current.setFromCamera(mouseRef.current, threeCameraRef.current);
+      const intersects = raycastRef.current.intersectObjects(serverObjectsRef.current);
+      
+      if (intersects.length > 0) {
+        const clickedObject = intersects[0].object;
+        if (clickedObject.userData?.onClick) {
+          clickedObject.userData.onClick();
+        }
+      }
+    };
+
+    threeContainerRef.current.addEventListener('click', handleClick);
+
+    const animate = () => {
+      animationRef.current = requestAnimationFrame(animate);
+      updateParticles();
+      updateServerObjects();
+      updateInfoPanels();
+      
+      if (threeControlsRef.current) {
+        threeControlsRef.current.update();
+      }
+      
+      renderer.render(scene, camera);
+    };
+    animate();
+
+    const handleResize = () => {
+      if (!threeContainerRef.current || !camera || !renderer) return;
+      
+      camera.aspect = threeContainerRef.current.clientWidth / threeContainerRef.current.clientHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(
+        threeContainerRef.current.clientWidth,
+        threeContainerRef.current.clientHeight
+      );
+    };
+    window.addEventListener('resize', handleResize);
+    
+    setImmersiveLoading(false);
+  };
+
+  const createServerDataStructure = (scene) => {
+    if (!currentServer) return;
+
+    serverObjectsRef.current.forEach(obj => scene.remove(obj));
+    serverObjectsRef.current = [];
+    fileNodesRef.current = [];
+
+    const server = currentServer;
+    
+    const coreGeometry = new THREE.IcosahedronGeometry(2, 3);
+    const coreMaterial = new THREE.MeshPhongMaterial({
+      color: 0x4285f4,
+      shininess: 100,
+      emissive: 0x4285f4,
+      emissiveIntensity: 0.3,
+      transparent: true,
+      opacity: 0.8
+    });
+    const core = new THREE.Mesh(coreGeometry, coreMaterial);
+    core.castShadow = true;
+    core.receiveShadow = true;
+    core.userData = { type: 'core', server: server };
+    scene.add(core);
+    serverObjectsRef.current.push(core);
+
+    const fileCount = Math.min(serverFiles.length, 40);
+    for (let i = 0; i < fileCount; i++) {
+      const file = serverFiles[i];
+      const angle = (i / fileCount) * Math.PI * 2;
+      const radius = 5 + (i % 4) * 1.5;
+      const height = Math.sin(i * 0.3) * 3;
+
+      const nodeGeometry = new THREE.OctahedronGeometry(0.4, 1);
+      const nodeMaterial = new THREE.MeshPhongMaterial({
+        color: getFileColor(file.path),
+        emissive: getFileColor(file.path),
+        emissiveIntensity: 0.2,
+        transparent: true,
+        opacity: 0.9
+      });
+      
+      const node = new THREE.Mesh(nodeGeometry, nodeMaterial);
+      node.position.set(
+        Math.cos(angle) * radius,
+        height,
+        Math.sin(angle) * radius
+      );
+      node.castShadow = true;
+      node.receiveShadow = true;
+      
+      node.userData = {
+        type: 'file',
+        file: file,
+        angle: angle,
+        radius: radius,
+        height: height,
+        speed: 0.5 + Math.random() * 0.5,
+        offset: Math.random() * Math.PI * 2,
+        onClick: () => viewFileInImmersive(file)
+      };
+      
+      scene.add(node);
+      serverObjectsRef.current.push(node);
+      fileNodesRef.current.push(node);
+
+      const lineGeometry = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0, 0, 0),
+        node.position.clone()
+      ]);
+      const lineMaterial = new THREE.LineBasicMaterial({
+        color: getFileColor(file.path),
+        transparent: true,
+        opacity: 0.2,
+        linewidth: 1
+      });
+      const line = new THREE.Line(lineGeometry, lineMaterial);
+      scene.add(line);
+      serverObjectsRef.current.push(line);
+    }
+
+    const versionCount = Math.min(serverVersions.length, 5);
+    for (let i = 0; i < versionCount; i++) {
+      const version = serverVersions[i];
+      const ringRadius = 8 + i * 2;
+      
+      const ringGeometry = new THREE.TorusGeometry(ringRadius, 0.1, 16, 100);
+      const ringMaterial = new THREE.MeshBasicMaterial({
+        color: i === 0 ? 0x34a853 : 0x8ab4f8,
+        transparent: true,
+        opacity: 0.15,
+        side: THREE.DoubleSide
+      });
+      const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+      ring.rotation.x = Math.PI / 2;
+      scene.add(ring);
+      serverObjectsRef.current.push(ring);
+
+      addVersionMarkers(scene, version, ringRadius);
+    }
+  };
+
+  const getFileColor = (path) => {
+    if (path.endsWith('.html')) return 0xff6b6b;
+    if (path.endsWith('.js')) return 0x4285f4;
+    if (path.endsWith('.css')) return 0x34a853;
+    if (path.endsWith('.json')) return 0xfbbc05;
+    if (path.endsWith('.md') || path.endsWith('.txt')) return 0x8ab4f8;
+    return 0xaaaaaa;
+  };
+
+  const createParticles = (scene) => {
+    const particleCount = 1500;
+    const particles = new THREE.BufferGeometry();
+    const positions = new Float32Array(particleCount * 3);
+    const colors = new Float32Array(particleCount * 3);
+
+    for (let i = 0; i < particleCount; i++) {
+      const i3 = i * 3;
+      
+      const radius = 20 + Math.random() * 15;
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      
+      positions[i3] = radius * Math.sin(phi) * Math.cos(theta);
+      positions[i3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
+      positions[i3 + 2] = radius * Math.cos(phi);
+      
+      colors[i3] = 0.2 + Math.abs(Math.sin(theta)) * 0.8;
+      colors[i3 + 1] = 0.2 + Math.abs(Math.cos(phi)) * 0.8;
+      colors[i3 + 2] = 0.5 + Math.random() * 0.5;
+    }
+
+    particles.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    particles.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    const particleMaterial = new THREE.PointsMaterial({
+      size: 0.15,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.7,
+      blending: THREE.AdditiveBlending,
+      sizeAttenuation: true
+    });
+
+    const particleSystem = new THREE.Points(particles, particleMaterial);
+    scene.add(particleSystem);
+    particlesRef.current.push(particleSystem);
+  };
+
+  const createInfoPanels = (scene) => {
+    if (!currentServer) return;
+
+    const createPanel = (title, content, position) => {
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      canvas.width = 512;
+      canvas.height = 256;
+      
+      context.fillStyle = 'rgba(10, 10, 10, 0.9)';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      
+      context.strokeStyle = 'rgba(66, 133, 244, 0.5)';
+      context.lineWidth = 4;
+      context.strokeRect(2, 2, canvas.width - 4, canvas.height - 4);
+      
+      context.font = 'bold 24px Arial';
+      context.fillStyle = '#4285f4';
+      context.textAlign = 'center';
+      context.textBaseline = 'top';
+      context.fillText(title, canvas.width / 2, 20);
+      
+      context.font = '16px Arial';
+      context.fillStyle = '#ffffff';
+      context.textAlign = 'left';
+      const lines = content.split('\n');
+      lines.forEach((line, i) => {
+        context.fillText(line, 30, 60 + i * 25);
+      });
+
+      const texture = new THREE.CanvasTexture(canvas);
+      const spriteMaterial = new THREE.SpriteMaterial({
+        map: texture,
+        transparent: true,
+        opacity: 0.9
+      });
+      
+      const sprite = new THREE.Sprite(spriteMaterial);
+      sprite.position.copy(position);
+      sprite.scale.set(8, 4, 1);
+      sprite.userData = { type: 'panel' };
+      
+      scene.add(sprite);
+      serverObjectsRef.current.push(sprite);
+    };
+
+    const serverInfo = `
+      📁 Files: ${serverFiles.length}
+      📦 Versions: ${serverVersions.length}
+      💬 Comments: ${serverComments.length}
+      👥 Members: ${serverMembers.length}
+      📥 Downloads: ${currentServer.total_downloads || 0}
+    `;
+    
+    createPanel(
+      currentServer.name,
+      serverInfo,
+      new THREE.Vector3(-12, 5, 0)
+    );
+
+    const recentFiles = serverFiles.slice(0, 5).map(f => 
+      `• ${f.path.split('/').pop()}`
+    ).join('\n');
+    
+    createPanel(
+      'Recent Files',
+      recentFiles || 'No files available',
+      new THREE.Vector3(12, 5, 0)
+    );
+  };
+
+  const createServerTitle = (scene) => {
+    if (!currentServer) return;
+
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    canvas.width = 1024;
+    canvas.height = 256;
+    
+    context.fillStyle = 'rgba(10, 10, 10, 0.8)';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    
+    context.font = 'bold 80px Arial';
+    context.fillStyle = '#ffffff';
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.fillText(currentServer.name, canvas.width / 2, canvas.height / 2);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    const spriteMaterial = new THREE.SpriteMaterial({
+      map: texture,
+      transparent: true,
+      opacity: 0.8
+    });
+    
+    const sprite = new THREE.Sprite(spriteMaterial);
+    sprite.position.set(0, 10, 0);
+    sprite.scale.set(10, 2.5, 1);
+    sprite.userData = { type: 'title' };
+    scene.add(sprite);
+    serverObjectsRef.current.push(sprite);
+  };
+
+  const addVersionMarkers = (scene, version, radius) => {
+    const markerGeometry = new THREE.SphereGeometry(0.3, 16, 16);
+    const markerMaterial = new THREE.MeshBasicMaterial({
+      color: 0x34a853,
+      transparent: true,
+      opacity: 0.8
+    });
+    
+    const angle = Math.random() * Math.PI * 2;
+    const marker = new THREE.Mesh(markerGeometry, markerMaterial);
+    marker.position.set(
+      Math.cos(angle) * radius,
+      0,
+      Math.sin(angle) * radius
+    );
+    
+    marker.userData = {
+      type: 'version',
+      version: version,
+      onClick: () => downloadVersion(version.id, version.version_name)
+    };
+    
+    scene.add(marker);
+    serverObjectsRef.current.push(marker);
+
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    canvas.width = 256;
+    canvas.height = 64;
+    
+    context.fillStyle = 'rgba(10, 10, 10, 0.7)';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    
+    context.font = 'bold 16px Arial';
+    context.fillStyle = '#ffffff';
+    context.textAlign = 'center';
+    context.fillText(`v${version.version_number}`, canvas.width / 2, 25);
+    
+    context.font = '12px Arial';
+    context.fillStyle = '#aaaaaa';
+    context.fillText(version.version_name, canvas.width / 2, 45);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    const labelMaterial = new THREE.SpriteMaterial({
+      map: texture,
+      transparent: true
+    });
+    
+    const label = new THREE.Sprite(labelMaterial);
+    label.position.copy(marker.position);
+    label.position.y += 1;
+    label.scale.set(2, 0.5, 1);
+    
+    scene.add(label);
+    serverObjectsRef.current.push(label);
+  };
+
+  const updateParticles = () => {
+    const time = Date.now() * 0.0001;
+    
+    particlesRef.current.forEach(particleSystem => {
+      const positions = particleSystem.geometry.attributes.position.array;
+      
+      for (let i = 0; i < positions.length; i += 3) {
+        positions[i] += Math.sin(time + i * 0.01) * 0.02;
+        positions[i + 1] += Math.cos(time + i * 0.01) * 0.02;
+        positions[i + 2] += Math.sin(time + i * 0.005) * 0.02;
+      }
+      
+      particleSystem.geometry.attributes.position.needsUpdate = true;
+    });
+  };
+
+  const updateServerObjects = () => {
+    const time = Date.now() * 0.001;
+    
+    fileNodesRef.current.forEach(node => {
+      if (node.userData?.type === 'file') {
+        const { angle, radius, height, speed, offset } = node.userData;
+        const newAngle = angle + time * 0.1 * speed + offset;
+        
+        node.position.x = Math.cos(newAngle) * radius;
+        node.position.y = height + Math.sin(time * 0.5 + offset) * 0.3;
+        node.position.z = Math.sin(newAngle) * radius;
+        
+        const scale = 1 + Math.sin(time * 2 + offset) * 0.1;
+        node.scale.set(scale, scale, scale);
+        
+        node.rotation.y += 0.01;
+      }
+    });
+  };
+
+  const updateInfoPanels = () => {
+    const time = Date.now() * 0.001;
+    
+    serverObjectsRef.current.forEach(obj => {
+      if (obj.userData?.type === 'panel') {
+        obj.position.y += Math.sin(time) * 0.01;
+      }
+    });
+  };
+
+  const viewFileInImmersive = (file) => {
+    setSelectedFile(file);
+    setFilePreview(file.content || '// No content available');
+    setShowImmersiveView(false);
+    setActiveTab('files');
+  };
+
+  const enterImmersiveView = () => {
+    if (!currentServer) return;
+    
+    setShowImmersiveView(true);
+    setTimeout(() => {
+      if (threeContainerRef.current) {
+        initImmersiveView();
+      }
+    }, 100);
+  };
+
+  const exitImmersiveView = () => {
+    setShowImmersiveView(false);
+    
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current);
+      animationRef.current = null;
     }
     
-    setFilePreview(previewContent);
+    if (threeRendererRef.current && threeContainerRef.current) {
+      threeContainerRef.current.removeChild(threeRendererRef.current.domElement);
+      threeRendererRef.current.dispose();
+      threeRendererRef.current = null;
+    }
+    
+    threeSceneRef.current = null;
+    threeCameraRef.current = null;
+    threeControlsRef.current = null;
+    serverObjectsRef.current = [];
+    particlesRef.current = [];
+    fileNodesRef.current = [];
+  };
+
+  const viewFile = async (file) => {
+    setSelectedFile(file);
+    
+    if (file.content) {
+      const ext = file.path.split('.').pop().toLowerCase();
+      
+      if (ext === 'html') {
+        setServerContent(file.content);
+        setIframeKey(prev => prev + 1);
+        setActiveTab('preview');
+        setIframeLoading(true);
+      } else {
+        setFilePreview(file.content);
+      }
+    } else {
+      try {
+        const response = await fetch(`/api/get-file-content?fileId=${file.id}&serverId=${selectedServer}`);
+        const data = await response.json();
+        
+        if (data.success && data.content) {
+          const updatedFile = { ...file, content: data.content };
+          setSelectedFile(updatedFile);
+          
+          setServerFiles(prev => 
+            prev.map(f => f.id === file.id ? updatedFile : f)
+          );
+          
+          const ext = file.path.split('.').pop().toLowerCase();
+          if (ext === 'html') {
+            setServerContent(data.content);
+            setIframeKey(prev => prev + 1);
+            setActiveTab('preview');
+            setIframeLoading(true);
+          } else {
+            setFilePreview(data.content);
+          }
+        } else {
+          setFilePreview(`// No content available for: ${file.path}\n// Version: ${file.version_name || 'current'}`);
+        }
+      } catch (error) {
+        console.error('Error fetching file content:', error);
+        setFilePreview(`// Error loading file content\n// Path: ${file.path}`);
+      }
+    }
   };
 
   const closeFilePreview = () => {
@@ -930,67 +1119,116 @@ export default function ExplorePage() {
   };
 
   const renderFileTree = (tree, path = '') => {
-  const entries = Object.entries(tree);
-  
-  return entries.map(([name, item]) => {
-    const fullPath = path ? `${path}/${name}` : `/${name}`;
+    const entries = Object.entries(tree);
     
-    if (item.isFile) {
-      return (
-        <motion.div
-          key={fullPath}
-          style={styles.fileTreeItem}
-          initial={{ opacity: 0, x: -10 }}
-          animate={{ opacity: 1, x: 0 }}
-          whileHover={{ backgroundColor: 'rgba(66, 133, 244, 0.1)' }}
-          onClick={() => viewFile(item)}
-        >
-          <span style={styles.fileIcon}>
-            {item.path.endsWith('.html') ? '🌐' : 
-             item.path.endsWith('.js') ? '📜' : 
-             item.path.endsWith('.css') ? '🎨' : 
-             item.path.endsWith('.json') ? '📋' : '📄'}
-          </span>
-          <span style={styles.fileName}>{name}</span>
-          {item.version_name && (
-            <span style={styles.versionTag}>v{item.version_name}</span>
-          )}
-        </motion.div>
-      );
-    } else {
-      const isExpanded = expandedFolders[fullPath];
-      const hasChildren = Object.keys(item).length > 0;
+    return entries.map(([name, item]) => {
+      const fullPath = path ? `${path}/${name}` : `/${name}`;
       
-      return (
-        <div key={fullPath}>
+      if (item.isFile) {
+        return (
           <motion.div
-            style={styles.folderItem}
-            whileHover={{ backgroundColor: 'rgba(255, 193, 7, 0.1)' }}
-            onClick={() => hasChildren && toggleFolder(fullPath)}
+            key={fullPath}
+            style={styles.fileTreeItem}
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            whileHover={{ backgroundColor: 'rgba(66, 133, 244, 0.15)' }}
+            onClick={() => viewFile(item)}
           >
-            <span style={styles.folderIcon}>
-              {hasChildren ? (isExpanded ? '📂' : '📁') : '📁'}
+            <span style={styles.fileIcon}>
+              {getFileIcon(item.path)}
             </span>
-            <span style={styles.folderName}>{name}</span>
-            {hasChildren && (
-              <motion.span
-                animate={{ rotate: isExpanded ? 90 : 0 }}
-                style={styles.arrow}
-              >
-                ▶
-              </motion.span>
+            <span style={styles.fileName}>{name}</span>
+            {item.version_name && (
+              <span style={styles.versionTag}>v{item.version_name}</span>
             )}
+            <span style={styles.fileSize}>
+              {item.content ? `${Math.ceil(item.content.length / 1024)}KB` : '?'}
+            </span>
           </motion.div>
-          {isExpanded && hasChildren && (
-            <div style={styles.folderContent}>
-              {renderFileTree(item, fullPath)}
-            </div>
-          )}
-        </div>
-      );
+        );
+      } else {
+        const isExpanded = expandedFolders[fullPath];
+        const hasChildren = Object.keys(item).length > 0;
+        
+        return (
+          <div key={fullPath}>
+            <motion.div
+              style={styles.folderItem}
+              whileHover={{ backgroundColor: 'rgba(255, 193, 7, 0.1)' }}
+              onClick={() => hasChildren && toggleFolder(fullPath)}
+            >
+              <span style={styles.folderIcon}>
+                {hasChildren ? (isExpanded ? '📂' : '📁') : '📁'}
+              </span>
+              <span style={styles.folderName}>{name}</span>
+              {hasChildren && (
+                <motion.span
+                  animate={{ rotate: isExpanded ? 90 : 0 }}
+                  style={styles.arrow}
+                >
+                  ▶
+                </motion.span>
+              )}
+            </motion.div>
+            {isExpanded && hasChildren && (
+              <div style={styles.folderContent}>
+                {renderFileTree(item, fullPath)}
+              </div>
+            )}
+          </div>
+        );
+      }
+    });
+  };
+
+  const getFeaturedServers = () => {
+    return servers.filter(server => server.is_public && (server.stats?.total_downloads > 100 || server.comment_count > 20))
+      .sort((a, b) => {
+        const aScore = (a.stats?.total_downloads || 0) + (a.comment_count || 0);
+        const bScore = (b.stats?.total_downloads || 0) + (b.comment_count || 0);
+        return bScore - aScore;
+      })
+      .slice(0, 6);
+  };
+
+  const getTrendingServers = () => {
+    return servers.filter(server => server.is_public)
+      .sort((a, b) => {
+        const aScore = (a.comment_count || 0) * 2 + (a.stats?.total_downloads || 0);
+        const bScore = (b.comment_count || 0) * 2 + (b.stats?.total_downloads || 0);
+        return bScore - aScore;
+      })
+      .slice(0, 8);
+  };
+
+  const getRecentlyUpdated = () => {
+    return servers.filter(server => server.is_public)
+      .sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at))
+      .slice(0, 6);
+  };
+
+  const getFilteredServers = () => {
+    switch (viewMode) {
+      case 'featured':
+        return getFeaturedServers();
+      case 'trending':
+        return getTrendingServers();
+      case 'recent':
+        return getRecentlyUpdated();
+      default:
+        return servers.filter(server => server.is_public || (user && (server.owner_id === user.id || server.user_permissions?.is_member)));
     }
-  }); // <-- THIS CLOSING PARENTHESIS WAS MISSING
-};
+  };
+
+  const getServerTags = (server) => {
+    const tags = [];
+    if (server.category) tags.push(server.category);
+    if (server.latest_version) tags.push(`v${server.latest_version.version_number}`);
+    if (server.total_downloads > 100) tags.push('🔥 Popular');
+    if (server.comment_count > 10) tags.push('💬 Active');
+    return tags.slice(0, 3);
+  };
+
   const postComment = async () => {
     if (!newComment.trim()) {
       setCommentError('Comment cannot be empty');
@@ -1017,13 +1255,11 @@ export default function ExplorePage() {
       const data = await response.json();
       
       if (data.success) {
-        // Add the new comment to the top of the list
         setServerComments(prev => [data.comment, ...prev]);
         setNewComment('');
         setShowCommentForm(false);
         setCommentError('');
         
-        // Update the server's comment count
         setServers(prev => prev.map(server => 
           server.id === selectedServer 
             ? { ...server, comment_count: (server.comment_count || 0) + 1 }
@@ -1060,14 +1296,12 @@ export default function ExplorePage() {
       const data = await response.json();
       
       if (data.success && data.download) {
-        // Update the version's download count in state
         setServerVersions(prev => prev.map(v => 
           v.id === versionId 
             ? { ...v, download_count: data.download.download_count } 
             : v
         ));
         
-        // Update total downloads in servers list
         setServers(prev => prev.map(server => 
           server.id === selectedServer 
             ? { 
@@ -1080,7 +1314,6 @@ export default function ExplorePage() {
             : server
         ));
       
-        // If there's a file URL, trigger download
         if (data.download.file_url) {
           const link = document.createElement('a');
           link.href = data.download.file_url;
@@ -1091,7 +1324,6 @@ export default function ExplorePage() {
           document.body.removeChild(link);
         }
         
-        // Show success message
         alert(`✅ Download started for ${data.download.version_name}`);
       } else {
         alert(data.error || 'Failed to start download');
@@ -1101,6 +1333,40 @@ export default function ExplorePage() {
       alert('Network error. Please try again.');
     } finally {
       setDownloadingVersion(null);
+    }
+  };
+
+  useEffect(() => {
+    let interval;
+    if (autoRefresh && selectedServer) {
+      interval = setInterval(() => {
+        refreshServer();
+      }, 30000);
+    }
+    return () => clearInterval(interval);
+  }, [autoRefresh, selectedServer]);
+
+  const refreshServer = async () => {
+    if (!selectedServer) return;
+    
+    try {
+      const serverRes = await fetch(`/api/get-server?serverId=${selectedServer}&includeVersions=true&includeFiles=true`);
+      const serverData = await serverRes.json();
+      
+      if (serverData.success) {
+        const currentServer = serverData.server;
+        const allFiles = await collectAllFiles(serverData);
+        setServerFiles(allFiles);
+        
+        const latestVersion = serverData.versions?.[0];
+        const content = findAndSetContent(allFiles, currentServer, latestVersion);
+        if (content !== serverContent) {
+          setServerContent(content);
+          setIframeKey(prev => prev + 1);
+        }
+      }
+    } catch (error) {
+      console.error('Error refreshing server:', error);
     }
   };
 
@@ -1119,6 +1385,8 @@ export default function ExplorePage() {
     setNewComment('');
     setCommentError('');
     setShowImmersiveView(false);
+    setActiveTab('preview');
+    setAutoRefresh(false);
   };
 
   const logout = () => {
@@ -1134,16 +1402,6 @@ export default function ExplorePage() {
     warningAccepted.current = true;
     setShowWarning(false);
   };
-
-  const refreshServer = () => {
-    if (selectedServer) {
-      setIframeKey(prev => prev + 1);
-    }
-  };
-
-  const currentServer = servers.find(s => s.id === selectedServer);
-  const filteredServers = getFilteredServers();
-  const fileTree = organizeFilesTree(serverFiles);
 
   const renderWarningModal = () => (
     <motion.div
@@ -1272,7 +1530,7 @@ export default function ExplorePage() {
         </motion.div>
         <div style={styles.immersiveControls}>
           <span style={styles.immersiveHint}>
-            🖱️ Drag to rotate • Scroll to zoom
+            🖱️ Drag to rotate • Scroll to zoom • Click files to view
           </span>
         </div>
       </div>
@@ -1348,10 +1606,6 @@ export default function ExplorePage() {
           <h4 style={styles.legendTitle}>🎨 3D Visualization Legend</h4>
           <div style={styles.legendItems}>
             <div style={styles.legendItem}>
-              <div style={{...styles.legendColor, background: '#4285f4'}} />
-              <span style={styles.legendText}>Server Core</span>
-            </div>
-            <div style={styles.legendItem}>
               <div style={{...styles.legendColor, background: '#ff6b6b'}} />
               <span style={styles.legendText}>HTML Files</span>
             </div>
@@ -1365,15 +1619,15 @@ export default function ExplorePage() {
             </div>
             <div style={styles.legendItem}>
               <div style={{...styles.legendColor, background: '#fbbc05'}} />
-              <span style={styles.legendText}>Other Files</span>
+              <span style={styles.legendText}>JSON Files</span>
+            </div>
+            <div style={styles.legendItem}>
+              <div style={{...styles.legendColor, background: '#8ab4f8'}} />
+              <span style={styles.legendText}>Text Files</span>
             </div>
             <div style={styles.legendItem}>
               <div style={{...styles.legendColor, background: '#34a853'}} />
               <span style={styles.legendText}>Latest Version</span>
-            </div>
-            <div style={styles.legendItem}>
-              <div style={{...styles.legendColor, background: '#8ab4f8'}} />
-              <span style={styles.legendText}>Other Versions</span>
             </div>
           </div>
         </div>
@@ -1537,6 +1791,59 @@ export default function ExplorePage() {
     </motion.div>
   );
 
+  const renderTabs = () => (
+    <div style={styles.tabsContainer}>
+      {['preview', 'files', 'versions', 'comments'].map(tab => (
+        <motion.button
+          key={tab}
+          style={{
+            ...styles.tabButton,
+            background: activeTab === tab 
+              ? 'linear-gradient(90deg, #4285f4, #34a853)' 
+              : 'rgba(255,255,255,0.05)',
+            color: activeTab === tab ? 'white' : '#aaa'
+          }}
+          onClick={() => setActiveTab(tab)}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+        >
+          {tab === 'preview' && '🌐 Preview'}
+          {tab === 'files' && '📁 Files'}
+          {tab === 'versions' && '📦 Versions'}
+          {tab === 'comments' && '💬 Comments'}
+        </motion.button>
+      ))}
+      
+      <div style={styles.tabControls}>
+        <motion.button
+          style={styles.refreshButton}
+          onClick={refreshServer}
+          whileHover={{ scale: 1.1, rotate: 180 }}
+          whileTap={{ scale: 0.9 }}
+          title="Refresh Server"
+        >
+          🔄
+        </motion.button>
+        
+        <motion.div
+          style={styles.autoRefreshToggle}
+          onClick={() => setAutoRefresh(!autoRefresh)}
+          whileHover={{ scale: 1.05 }}
+        >
+          <span style={{
+            ...styles.autoRefreshIcon,
+            color: autoRefresh ? '#34a853' : '#888'
+          }}>
+            {autoRefresh ? '⏳' : '⏸️'}
+          </span>
+          <span style={styles.autoRefreshText}>
+            Auto-refresh: {autoRefresh ? 'ON' : 'OFF'}
+          </span>
+        </motion.div>
+      </div>
+    </div>
+  );
+
   const renderServerView = () => {
     const currentServer = servers.find(s => s.id === selectedServer);
     
@@ -1649,38 +1956,15 @@ export default function ExplorePage() {
                 {currentServer?.is_public ? '🌐 Public' : '🔒 Private'}
               </motion.span>
             </motion.div>
-            
-            <motion.button
-              style={styles.refreshButton}
-              onClick={refreshServer}
-              whileHover={{ scale: 1.1, rotate: 180 }}
-              whileTap={{ scale: 0.9 }}
-            >
-              🔄
-            </motion.button>
           </div>
         </motion.div>
 
-        <motion.div 
-          style={styles.warningBox}
-          initial={{ y: -50, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.1 }}
-        >
-          <motion.span
-            animate={{ rotate: [0, 10, -10, 0] }}
-            transition={{ duration: 2, repeat: Infinity }}
-          >
-            ⚠️
-          </motion.span>
-          Viewing user-generated content in a sandboxed environment
-          {!user && ' (Log in to comment or download files)'}
-        </motion.div>
+        {renderTabs()}
 
-        <div style={styles.mainContentArea}>
-          <div style={styles.leftColumn}>
+        <div style={styles.tabContent}>
+          {activeTab === 'preview' && (
             <div style={styles.iframeContainer}>
-              {loadingServer ? (
+              {loadingServer || iframeLoading ? (
                 <motion.div 
                   style={styles.loadingContainer}
                   initial={{ opacity: 0 }}
@@ -1698,7 +1982,7 @@ export default function ExplorePage() {
                     animate={{ opacity: [0.5, 1, 0.5] }}
                     transition={{ duration: 2, repeat: Infinity }}
                   >
-                    Loading server...
+                    Loading server content...
                   </motion.h3>
                 </motion.div>
               ) : (
@@ -1714,11 +1998,14 @@ export default function ExplorePage() {
                     style={styles.serverIframe}
                     title="Server Content"
                     sandbox="allow-scripts allow-same-origin"
+                    onLoad={() => setIframeLoading(false)}
                   />
                 </motion.div>
               )}
             </div>
-
+          )}
+          
+          {activeTab === 'files' && (
             <motion.div 
               style={styles.fileList}
               initial={{ y: 50, opacity: 0 }}
@@ -1735,15 +2022,22 @@ export default function ExplorePage() {
                 )}
               </motion.h4>
               <div style={styles.fileTree}>
-                {renderFileTree(fileTree)}
+                {renderFileTree(organizeFilesTree(serverFiles))}
               </div>
             </motion.div>
-          </div>
-
-          <div style={styles.rightColumn}>
-            {serverVersions.length > 0 && renderVersionsSection()}
-            {renderCommentsSection()}
-          </div>
+          )}
+          
+          {activeTab === 'versions' && serverVersions.length > 0 && (
+            <div style={styles.versionsContainer}>
+              {renderVersionsSection()}
+            </div>
+          )}
+          
+          {activeTab === 'comments' && (
+            <div style={styles.commentsContainer}>
+              {renderCommentsSection()}
+            </div>
+          )}
         </div>
 
         <AnimatePresence>
@@ -1787,7 +2081,7 @@ export default function ExplorePage() {
       >
         <div style={styles.viewModeButtons}>
           {[
-            { id: 'all', label: '🌐 All Servers', count: servers.length },
+            { id: 'all', label: '🌐 All Servers', count: servers.filter(s => s.is_public).length },
             { id: 'featured', label: '⭐ Featured', count: getFeaturedServers().length },
             { id: 'trending', label: '📈 Trending', count: getTrendingServers().length },
             { id: 'recent', label: '🕐 Recent', count: getRecentlyUpdated().length }
@@ -1824,7 +2118,7 @@ export default function ExplorePage() {
           }
         }}
       >
-        {filteredServers.map((server, index) => {
+        {getFilteredServers().map((server, index) => {
           const tags = getServerTags(server);
           const isFeatured = getFeaturedServers().some(s => s.id === server.id);
           const isTrending = getTrendingServers().some(s => s.id === server.id);
@@ -1979,10 +2273,12 @@ export default function ExplorePage() {
     </motion.div>
   );
 
+  const currentServer = servers.find(s => s.id === selectedServer);
+
   return (
     <>
       <Head>
-        <title>Server.x - {selectedServer ? 'Viewing Server' : 'Explore'}</title>
+        <title>Server.x - {selectedServer ? (showImmersiveView ? 'Immersive View' : currentServer?.name) : 'Explore'}</title>
       </Head>
 
       <div style={styles.container}>
@@ -2062,6 +2358,10 @@ export default function ExplorePage() {
             ) : renderExploreGrid()}
           </AnimatePresence>
         </div>
+
+        <AnimatePresence>
+          {selectedFile && renderFilePreview()}
+        </AnimatePresence>
       </div>
     </>
   );
@@ -2341,7 +2641,6 @@ const styles = {
     flex: 1,
     minWidth: '110px'
   },
-  // Server View Styles
   serverView: {
     height: 'calc(100vh - 140px)',
     display: 'flex',
@@ -2471,43 +2770,57 @@ const styles = {
     transition: 'all 0.2s ease',
     flexShrink: 0
   },
-  warningBox: {
-    background: 'rgba(220, 53, 69, 0.1)',
-    color: '#ff6b6b',
-    padding: '12px 30px',
-    textAlign: 'center',
-    fontSize: '14px',
+  tabsContainer: {
+    display: 'flex',
+    gap: '10px',
+    padding: '15px 20px',
+    background: 'rgba(26, 26, 26, 0.8)',
+    borderBottom: '1px solid rgba(66, 133, 244, 0.2)',
+    alignItems: 'center'
+  },
+  tabButton: {
+    padding: '10px 20px',
+    borderRadius: '8px',
+    border: 'none',
+    cursor: 'pointer',
     fontWeight: '600',
-    borderBottom: '1px solid rgba(220, 53, 69, 0.2)',
+    fontSize: '14px',
+    transition: 'all 0.3s ease'
+  },
+  tabControls: {
+    marginLeft: 'auto',
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: '10px',
-    flexShrink: 0
+    gap: '15px'
   },
-  mainContentArea: {
+  autoRefreshToggle: {
     display: 'flex',
-    flex: 1,
-    overflow: 'hidden'
+    alignItems: 'center',
+    gap: '8px',
+    cursor: 'pointer',
+    padding: '8px 12px',
+    background: 'rgba(255,255,255,0.05)',
+    borderRadius: '8px',
+    border: '1px solid rgba(255,255,255,0.1)'
   },
-  leftColumn: {
-    flex: 3,
-    display: 'flex',
-    flexDirection: 'column',
-    overflow: 'hidden'
+  autoRefreshIcon: {
+    fontSize: '16px'
   },
-  rightColumn: {
+  autoRefreshText: {
+    fontSize: '12px',
+    color: '#aaa'
+  },
+  tabContent: {
     flex: 1,
-    background: 'rgba(26, 26, 26, 0.5)',
-    borderLeft: '1px solid rgba(66, 133, 244, 0.1)',
-    padding: '20px',
     overflow: 'auto',
-    minWidth: '300px'
+    padding: '20px'
   },
   iframeContainer: {
-    flex: 3,
+    height: '100%',
     position: 'relative',
-    overflow: 'hidden'
+    overflow: 'hidden',
+    borderRadius: '10px',
+    background: '#0a0a0a'
   },
   iframeWrapper: {
     width: '100%',
@@ -2555,13 +2868,11 @@ const styles = {
     background: 'white'
   },
   fileList: {
-    flex: 1,
+    height: '100%',
     background: 'rgba(26, 26, 26, 0.8)',
-    borderTop: '1px solid rgba(255,255,255,0.1)',
+    borderRadius: '10px',
     padding: '20px',
-    overflowY: 'auto',
-    minHeight: '200px',
-    maxHeight: '300px'
+    overflowY: 'auto'
   },
   fileListTitle: {
     margin: '0 0 15px 0',
@@ -2641,12 +2952,248 @@ const styles = {
     fontWeight: '600',
     border: '1px solid rgba(66, 133, 244, 0.3)'
   },
+  fileSize: {
+    fontSize: '11px',
+    color: '#888',
+    marginLeft: 'auto',
+    fontFamily: "'Fira Code', monospace"
+  },
   arrow: {
     fontSize: '10px',
     marginLeft: 'auto',
     transition: 'transform 0.2s ease'
   },
-  // Immersive View Styles
+  versionsContainer: {
+    height: '100%',
+    overflowY: 'auto'
+  },
+  commentsContainer: {
+    height: '100%',
+    overflowY: 'auto'
+  },
+  versionsSection: {
+    marginBottom: '30px'
+  },
+  versionsTitle: {
+    fontSize: '16px',
+    fontWeight: '600',
+    color: '#fff',
+    marginBottom: '15px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px'
+  },
+  versionsGrid: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px'
+  },
+  versionCard: {
+    background: 'rgba(255, 255, 255, 0.05)',
+    border: '1px solid rgba(66, 133, 244, 0.1)',
+    borderRadius: '10px',
+    padding: '15px',
+    transition: 'all 0.3s ease'
+  },
+  versionHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: '10px'
+  },
+  versionName: {
+    margin: 0,
+    fontSize: '14px',
+    fontWeight: '700',
+    color: '#fff'
+  },
+  versionNumber: {
+    background: 'rgba(66, 133, 244, 0.2)',
+    color: '#8ab4f8',
+    padding: '2px 8px',
+    borderRadius: '8px',
+    fontSize: '11px',
+    fontWeight: '600'
+  },
+  versionDesc: {
+    color: '#aaa',
+    fontSize: '13px',
+    lineHeight: '1.4',
+    marginBottom: '10px',
+    display: '-webkit-box',
+    WebkitLineClamp: 2,
+    WebkitBoxOrient: 'vertical',
+    overflow: 'hidden'
+  },
+  versionStats: {
+    display: 'flex',
+    gap: '10px',
+    marginBottom: '15px',
+    flexWrap: 'wrap'
+  },
+  versionStat: {
+    color: '#888',
+    fontSize: '12px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '5px'
+  },
+  downloadButton: {
+    background: 'linear-gradient(90deg, #4285f4, #34a853)',
+    color: 'white',
+    border: 'none',
+    padding: '8px 16px',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontWeight: '600',
+    fontSize: '13px',
+    width: '100%',
+    transition: 'all 0.3s ease'
+  },
+  commentsSection: {
+    marginBottom: '30px'
+  },
+  commentsHeader: {
+    marginBottom: '15px'
+  },
+  commentsTitle: {
+    fontSize: '16px',
+    fontWeight: '600',
+    color: '#fff',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: '10px'
+  },
+  newCommentButton: {
+    background: 'rgba(66, 133, 244, 0.15)',
+    color: '#8ab4f8',
+    border: '1px solid rgba(66, 133, 244, 0.3)',
+    padding: '6px 12px',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontWeight: '600',
+    fontSize: '12px',
+    transition: 'all 0.3s ease'
+  },
+  commentForm: {
+    background: 'rgba(255, 255, 255, 0.05)',
+    border: '1px solid rgba(66, 133, 244, 0.2)',
+    borderRadius: '10px',
+    padding: '15px',
+    marginBottom: '20px',
+    overflow: 'hidden'
+  },
+  commentTextarea: {
+    width: '100%',
+    background: 'rgba(255, 255, 255, 0.03)',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+    borderRadius: '8px',
+    padding: '10px',
+    color: 'white',
+    fontFamily: "'Inter', sans-serif",
+    fontSize: '14px',
+    resize: 'vertical',
+    minHeight: '80px',
+    marginBottom: '10px',
+    boxSizing: 'border-box'
+  },
+  commentError: {
+    color: '#ff6b6b',
+    fontSize: '13px',
+    marginBottom: '10px',
+    padding: '5px 10px',
+    background: 'rgba(220, 53, 69, 0.1)',
+    borderRadius: '6px',
+    border: '1px solid rgba(220, 53, 69, 0.2)'
+  },
+  commentFormActions: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center'
+  },
+  submitCommentButton: {
+    background: 'linear-gradient(90deg, #4285f4, #34a853)',
+    color: 'white',
+    border: 'none',
+    padding: '8px 16px',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontWeight: '600',
+    fontSize: '13px',
+    transition: 'all 0.3s ease'
+  },
+  commentLength: {
+    color: '#888',
+    fontSize: '12px',
+    fontFamily: "'Fira Code', monospace"
+  },
+  commentsList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '15px',
+    maxHeight: '400px',
+    overflowY: 'auto'
+  },
+  commentCard: {
+    background: 'rgba(255, 255, 255, 0.03)',
+    border: '1px solid rgba(255, 255, 255, 0.05)',
+    borderRadius: '10px',
+    padding: '15px'
+  },
+  commentHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: '10px'
+  },
+  commentUser: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px'
+  },
+  commentAvatar: {
+    width: '32px',
+    height: '32px',
+    borderRadius: '50%',
+    objectFit: 'cover',
+    border: '2px solid rgba(66, 133, 244, 0.3)'
+  },
+  commentUsername: {
+    color: '#fff',
+    fontSize: '14px'
+  },
+  commentDate: {
+    color: '#888',
+    fontSize: '12px',
+    marginTop: '2px'
+  },
+  bugReportTag: {
+    background: 'rgba(220, 53, 69, 0.15)',
+    color: '#ff6b6b',
+    padding: '3px 8px',
+    borderRadius: '6px',
+    fontSize: '11px',
+    fontWeight: '600',
+    border: '1px solid rgba(220, 53, 69, 0.2)',
+    whiteSpace: 'nowrap'
+  },
+  commentContent: {
+    color: '#ddd',
+    fontSize: '14px',
+    lineHeight: '1.5',
+    whiteSpace: 'pre-wrap',
+    wordBreak: 'break-word'
+  },
+  noComments: {
+    textAlign: 'center',
+    color: '#888',
+    fontSize: '14px',
+    padding: '30px',
+    background: 'rgba(255, 255, 255, 0.03)',
+    borderRadius: '10px',
+    border: '1px dashed rgba(255, 255, 255, 0.1)'
+  },
   immersiveView: {
     position: 'fixed',
     top: 0,
@@ -2824,232 +3371,6 @@ const styles = {
     fontSize: '14px',
     fontWeight: '500'
   },
-  // Versions Section
-  versionsSection: {
-    marginBottom: '30px'
-  },
-  versionsTitle: {
-    fontSize: '16px',
-    fontWeight: '600',
-    color: '#fff',
-    marginBottom: '15px',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px'
-  },
-  versionsGrid: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '10px'
-  },
-  versionCard: {
-    background: 'rgba(255, 255, 255, 0.05)',
-    border: '1px solid rgba(66, 133, 244, 0.1)',
-    borderRadius: '10px',
-    padding: '15px',
-    transition: 'all 0.3s ease'
-  },
-  versionHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: '10px'
-  },
-  versionName: {
-    margin: 0,
-    fontSize: '14px',
-    fontWeight: '700',
-    color: '#fff'
-  },
-  versionNumber: {
-    background: 'rgba(66, 133, 244, 0.2)',
-    color: '#8ab4f8',
-    padding: '2px 8px',
-    borderRadius: '8px',
-    fontSize: '11px',
-    fontWeight: '600'
-  },
-  versionDesc: {
-    color: '#aaa',
-    fontSize: '13px',
-    lineHeight: '1.4',
-    marginBottom: '10px',
-    display: '-webkit-box',
-    WebkitLineClamp: 2,
-    WebkitBoxOrient: 'vertical',
-    overflow: 'hidden'
-  },
-  versionStats: {
-    display: 'flex',
-    gap: '10px',
-    marginBottom: '15px',
-    flexWrap: 'wrap'
-  },
-  versionStat: {
-    color: '#888',
-    fontSize: '12px',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '5px'
-  },
-  downloadButton: {
-    background: 'linear-gradient(90deg, #4285f4, #34a853)',
-    color: 'white',
-    border: 'none',
-    padding: '8px 16px',
-    borderRadius: '8px',
-    cursor: 'pointer',
-    fontWeight: '600',
-    fontSize: '13px',
-    width: '100%',
-    transition: 'all 0.3s ease'
-  },
-  // Comments Section
-  commentsSection: {
-    marginBottom: '30px'
-  },
-  commentsHeader: {
-    marginBottom: '15px'
-  },
-  commentsTitle: {
-    fontSize: '16px',
-    fontWeight: '600',
-    color: '#fff',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: '10px'
-  },
-  newCommentButton: {
-    background: 'rgba(66, 133, 244, 0.15)',
-    color: '#8ab4f8',
-    border: '1px solid rgba(66, 133, 244, 0.3)',
-    padding: '6px 12px',
-    borderRadius: '8px',
-    cursor: 'pointer',
-    fontWeight: '600',
-    fontSize: '12px',
-    transition: 'all 0.3s ease'
-  },
-  commentForm: {
-    background: 'rgba(255, 255, 255, 0.05)',
-    border: '1px solid rgba(66, 133, 244, 0.2)',
-    borderRadius: '10px',
-    padding: '15px',
-    marginBottom: '20px',
-    overflow: 'hidden'
-  },
-  commentTextarea: {
-    width: '100%',
-    background: 'rgba(255, 255, 255, 0.03)',
-    border: '1px solid rgba(255, 255, 255, 0.1)',
-    borderRadius: '8px',
-    padding: '10px',
-    color: 'white',
-    fontFamily: "'Inter', sans-serif",
-    fontSize: '14px',
-    resize: 'vertical',
-    minHeight: '80px',
-    marginBottom: '10px',
-    boxSizing: 'border-box'
-  },
-  commentError: {
-    color: '#ff6b6b',
-    fontSize: '13px',
-    marginBottom: '10px',
-    padding: '5px 10px',
-    background: 'rgba(220, 53, 69, 0.1)',
-    borderRadius: '6px',
-    border: '1px solid rgba(220, 53, 69, 0.2)'
-  },
-  commentFormActions: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center'
-  },
-  submitCommentButton: {
-    background: 'linear-gradient(90deg, #4285f4, #34a853)',
-    color: 'white',
-    border: 'none',
-    padding: '8px 16px',
-    borderRadius: '8px',
-    cursor: 'pointer',
-    fontWeight: '600',
-    fontSize: '13px',
-    transition: 'all 0.3s ease'
-  },
-  commentLength: {
-    color: '#888',
-    fontSize: '12px',
-    fontFamily: "'Fira Code', monospace"
-  },
-  commentsList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '15px',
-    maxHeight: '400px',
-    overflowY: 'auto'
-  },
-  commentCard: {
-    background: 'rgba(255, 255, 255, 0.03)',
-    border: '1px solid rgba(255, 255, 255, 0.05)',
-    borderRadius: '10px',
-    padding: '15px'
-  },
-  commentHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: '10px'
-  },
-  commentUser: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px'
-  },
-  commentAvatar: {
-    width: '32px',
-    height: '32px',
-    borderRadius: '50%',
-    objectFit: 'cover',
-    border: '2px solid rgba(66, 133, 244, 0.3)'
-  },
-  commentUsername: {
-    color: '#fff',
-    fontSize: '14px'
-  },
-  commentDate: {
-    color: '#888',
-    fontSize: '12px',
-    marginTop: '2px'
-  },
-  bugReportTag: {
-    background: 'rgba(220, 53, 69, 0.15)',
-    color: '#ff6b6b',
-    padding: '3px 8px',
-    borderRadius: '6px',
-    fontSize: '11px',
-    fontWeight: '600',
-    border: '1px solid rgba(220, 53, 69, 0.2)',
-    whiteSpace: 'nowrap'
-  },
-  commentContent: {
-    color: '#ddd',
-    fontSize: '14px',
-    lineHeight: '1.5',
-    whiteSpace: 'pre-wrap',
-    wordBreak: 'break-word'
-  },
-  noComments: {
-    textAlign: 'center',
-    color: '#888',
-    fontSize: '14px',
-    padding: '30px',
-    background: 'rgba(255, 255, 255, 0.03)',
-    borderRadius: '10px',
-    border: '1px dashed rgba(255, 255, 255, 0.1)'
-  },
-  // File Preview Modal
   previewOverlay: {
     position: 'fixed',
     top: 0,
@@ -3133,7 +3454,6 @@ const styles = {
     height: '100%',
     overflow: 'auto'
   },
-  // Modal Styles
   modalOverlay: { 
     position: 'fixed', 
     top: 0, 
