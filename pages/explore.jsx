@@ -507,170 +507,233 @@ export default function ExplorePage() {
     return tags.slice(0, 3);
   };
 
-  const enterServer = async (serverId) => {
-    if (!warningAccepted.current) {
-      alert("Please acknowledge the security warning first.");
-      setShowWarning(true);
-      return;
-    }
+ const enterServer = async (serverId) => {
+  if (!warningAccepted.current) {
+    alert("Please acknowledge the security warning first.");
+    setShowWarning(true);
+    return;
+  }
 
-    setLoadingServer(true);
-    setSelectedServer(serverId);
-    setSelectedFile(null);
-    setFilePreview('');
-    setExpandedFolders({});
-    setServerVersions([]);
-    setServerComments([]);
-    setServerStats(null);
-    setServerMembers([]);
-    setShowCommentForm(false);
-    setNewComment('');
-    setShowImmersiveView(false);
+  setLoadingServer(true);
+  setSelectedServer(serverId);
+  setSelectedFile(null);
+  setFilePreview('');
+  setExpandedFolders({});
+  setServerVersions([]);
+  setServerComments([]);
+  setServerStats(null);
+  setServerMembers([]);
+  setShowCommentForm(false);
+  setNewComment('');
+  setShowImmersiveView(false);
+  
+  try {
+    // Load comprehensive server data including files
+    const serverRes = await fetch(`/api/get-server?serverId=${serverId}&includeVersions=true&includeComments=true&includeStats=true&includeMembers=true&includeFiles=true`);
+    const serverData = await serverRes.json();
     
-    try {
-      // Load comprehensive server data including files
-      const serverRes = await fetch(`/api/get-server?serverId=${serverId}&includeVersions=true&includeComments=true&includeStats=true&includeMembers=true&includeFiles=true`);
-      const serverData = await serverRes.json();
+    console.log('Server data received:', {
+      serverData,
+      hasVersions: !!serverData.versions,
+      versionCount: serverData.versions?.length || 0,
+      firstVersion: serverData.versions?.[0],
+      filesInResponse: serverData.files,
+      filesInFirstVersion: serverData.versions?.[0]?.files
+    });
+    
+    if (serverData.success) {
+      const currentServer = serverData.server;
       
-      console.log('Server data received:', {
-        serverData,
-        hasVersions: !!serverData.versions,
-        versionCount: serverData.versions?.length || 0,
-        firstVersion: serverData.versions?.[0],
-        filesInResponse: serverData.files,
-        filesInFirstVersion: serverData.versions?.[0]?.files
-      });
+      // Update servers list with latest data
+      setServers(prev => prev.map(s => s.id === serverId ? { ...s, ...currentServer } : s));
       
-      if (serverData.success) {
-        const currentServer = serverData.server;
+      // Set versions
+      if (serverData.versions) {
+        setServerVersions(serverData.versions);
         
-        // Update servers list with latest data
-        setServers(prev => prev.map(s => s.id === serverId ? { ...s, ...currentServer } : s));
+        // COLLECT FILES - MULTIPLE APPROACHES WITH FALLBACK
+        const allFiles = [];
         
-        // Set versions
-        if (serverData.versions) {
-          setServerVersions(serverData.versions);
-          
-          // COLLECT FILES - MULTIPLE APPROACHES
-          const allFiles = [];
-          
-          // APPROACH 1: Files might be at root level (serverData.files)
-          if (serverData.files && serverData.files.length > 0) {
-            console.log('Found files at root level:', serverData.files.length);
-            serverData.files.forEach(file => {
+        // APPROACH 1: Files might be at root level (serverData.files)
+        if (serverData.files && serverData.files.length > 0) {
+          console.log('Found files at root level:', serverData.files.length);
+          serverData.files.forEach(file => {
+            allFiles.push({
+              ...file,
+              path: file.path || file.name,
+              version_id: file.version_id,
+              version_name: serverData.versions.find(v => v.id === file.version_id)?.version_name || 'unknown'
+            });
+          });
+        }
+        
+        // APPROACH 2: Files might be nested in versions (version.files)
+        serverData.versions.forEach(version => {
+          if (version.files && version.files.length > 0) {
+            console.log(`Found ${version.files.length} files in version ${version.version_name}`);
+            version.files.forEach(file => {
               allFiles.push({
                 ...file,
                 path: file.path || file.name,
-                version_id: file.version_id,
-                version_name: serverData.versions.find(v => v.id === file.version_id)?.version_name || 'unknown'
+                version_id: version.id,
+                version_name: version.version_name
               });
             });
           }
+        });
+        
+        // APPROACH 3: Files might be in version_files table (separate from versions array)
+        if (serverData.version_files && serverData.version_files.length > 0) {
+          console.log('Found version_files:', serverData.version_files.length);
+          serverData.version_files.forEach(file => {
+            allFiles.push({
+              ...file,
+              path: file.path,
+              content: file.content,
+              version_id: file.version_id,
+              version_name: serverData.versions.find(v => v.id === file.version_id)?.version_name || 'unknown'
+            });
+          });
+        }
+        
+        // FALLBACK APPROACH 4: Use the dedicated get-server-files API
+        if (allFiles.length === 0) {
+          console.log('No files found in primary sources, trying fallback API...');
           
-          // APPROACH 2: Files might be nested in versions (version.files)
-          serverData.versions.forEach(version => {
-            if (version.files && version.files.length > 0) {
-              console.log(`Found ${version.files.length} files in version ${version.version_name}`);
-              version.files.forEach(file => {
+          // Try to get files from specific version first (if there's a latest version)
+          const latestVersion = serverData.versions?.[0];
+          if (latestVersion) {
+            console.log('Trying to fetch from latest version:', latestVersion.id);
+            const fallbackRes = await fetch(`/api/get-server-files?serverId=${serverId}&published=true&versionId=${latestVersion.id}`);
+            const fallbackData = await fallbackRes.json();
+            
+            if (fallbackData.success && fallbackData.files && fallbackData.files.length > 0) {
+              console.log(`Fallback found ${fallbackData.files.length} files from version ${latestVersion.id}`);
+              fallbackData.files.forEach(file => {
                 allFiles.push({
                   ...file,
-                  path: file.path || file.name,
-                  version_id: version.id,
-                  version_name: version.version_name
+                  path: file.path,
+                  content: file.content,
+                  version_id: latestVersion.id,
+                  version_name: latestVersion.version_name,
+                  source: 'fallback-version'
+                });
+              });
+            } else {
+              // Try to get current working files as final fallback
+              console.log('Trying to fetch current working files...');
+              const currentRes = await fetch(`/api/get-server-files?serverId=${serverId}`);
+              const currentData = await currentRes.json();
+              
+              if (currentData.success && currentData.files && currentData.files.length > 0) {
+                console.log(`Fallback found ${currentData.files.length} current working files`);
+                currentData.files.forEach(file => {
+                  allFiles.push({
+                    ...file,
+                    path: file.path,
+                    content: file.content,
+                    version_id: null,
+                    version_name: 'current',
+                    source: 'fallback-current'
+                  });
+                });
+              }
+            }
+          } else {
+            // No versions, try current files directly
+            console.log('No versions found, trying current working files...');
+            const currentRes = await fetch(`/api/get-server-files?serverId=${serverId}`);
+            const currentData = await currentRes.json();
+            
+            if (currentData.success && currentData.files && currentData.files.length > 0) {
+              console.log(`Fallback found ${currentData.files.length} current working files`);
+              currentData.files.forEach(file => {
+                allFiles.push({
+                  ...file,
+                  path: file.path,
+                  content: file.content,
+                  version_id: null,
+                  version_name: 'current',
+                  source: 'fallback-current'
                 });
               });
             }
-          });
-          
-          // APPROACH 3: Files might be in version_files table (separate from versions array)
-          if (serverData.version_files && serverData.version_files.length > 0) {
-            console.log('Found version_files:', serverData.version_files.length);
-            serverData.version_files.forEach(file => {
-              allFiles.push({
-                ...file,
-                path: file.path,
-                content: file.content,
-                version_id: file.version_id,
-                version_name: serverData.versions.find(v => v.id === file.version_id)?.version_name || 'unknown'
-              });
-            });
           }
-          
-          console.log('Total files collected:', allFiles.length, allFiles);
-          setServerFiles(allFiles);
-          
-          // FIND AND SET CONTENT - MULTIPLE ATTEMPTS
-          let foundContent = false;
-          
-          // Try index.html first
-          const indexFile = allFiles.find(f => 
-            f.path && (
-              f.path === '/index.html' || 
-              f.path.endsWith('/index.html') || 
-              f.path === 'index.html' ||
-              f.path.includes('index.html') ||
-              f.name === 'index.html'
-            )
+        }
+        
+        console.log('Total files collected after fallback:', allFiles.length, allFiles);
+        setServerFiles(allFiles);
+        
+        // FIND AND SET CONTENT - MULTIPLE ATTEMPTS
+        let foundContent = false;
+        
+        // Try index.html first
+        const indexFile = allFiles.find(f => 
+          f.path && (
+            f.path === '/index.html' || 
+            f.path.endsWith('/index.html') || 
+            f.path === 'index.html' ||
+            f.path.includes('index.html') ||
+            f.name === 'index.html'
+          )
+        );
+        
+        if (indexFile && indexFile.content) {
+          console.log('Found index.html:', indexFile.path);
+          setServerContent(indexFile.content);
+          foundContent = true;
+        }
+        
+        // Try any HTML file if no index.html found
+        if (!foundContent && allFiles.length > 0) {
+          const firstHtml = allFiles.find(f => 
+            f.path && (f.path.endsWith('.html') || f.name?.endsWith('.html'))
           );
           
-          if (indexFile && indexFile.content) {
-            console.log('Found index.html:', indexFile.path);
-            setServerContent(indexFile.content);
+          if (firstHtml && firstHtml.content) {
+            console.log('Found HTML file:', firstHtml.path);
+            setServerContent(firstHtml.content);
             foundContent = true;
           }
-          
-          // Try any HTML file if no index.html found
-          if (!foundContent && allFiles.length > 0) {
-            const firstHtml = allFiles.find(f => 
-              f.path && (f.path.endsWith('.html') || f.name?.endsWith('.html'))
-            );
-            
-            if (firstHtml && firstHtml.content) {
-              console.log('Found HTML file:', firstHtml.path);
-              setServerContent(firstHtml.content);
-              foundContent = true;
-            }
-          }
-          
-          // Generate default page if no content found
-          if (!foundContent) {
-            console.log('No content found, generating default page');
-            setServerContent(generateDefaultPage(currentServer, serverData.versions[0]));
-          }
-        } else {
-          console.log('No versions found, generating default page');
-          setServerContent(generateDefaultPage(currentServer, null));
         }
         
-        // Set comments
-        if (serverData.comments) {
-          setServerComments(serverData.comments);
-        }
-        
-        // Set stats
-        if (serverData.stats) {
-          setServerStats(serverData.stats);
-        }
-        
-        // Set members
-        if (serverData.members) {
-          setServerMembers(serverData.members);
+        // Generate default page if no content found
+        if (!foundContent) {
+          console.log('No content found, generating default page');
+          setServerContent(generateDefaultPage(currentServer, serverData.versions[0]));
         }
       } else {
-        console.error('Server API error:', serverData.error);
-        setServerContent(generateErrorPage());
+        console.log('No versions found, generating default page');
+        setServerContent(generateDefaultPage(currentServer, null));
       }
       
-    } catch (error) {
-      console.error('Failed to load server:', error);
+      // Set comments
+      if (serverData.comments) {
+        setServerComments(serverData.comments);
+      }
+      
+      // Set stats
+      if (serverData.stats) {
+        setServerStats(serverData.stats);
+      }
+      
+      // Set members
+      if (serverData.members) {
+        setServerMembers(serverData.members);
+      }
+    } else {
+      console.error('Server API error:', serverData.error);
       setServerContent(generateErrorPage());
-    } finally {
-      setLoadingServer(false);
-      setIframeKey(prev => prev + 1);
     }
-  }; 
     
-
+  } catch (error) {
+    console.error('Failed to load server:', error);
+    setServerContent(generateErrorPage());
+  } finally {
+    setLoadingServer(false);
+    setIframeKey(prev => prev + 1);
+  }
+};
   const generateDefaultPage = (server, latestVersion) => {
     return `
       <!DOCTYPE html>
