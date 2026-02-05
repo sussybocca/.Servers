@@ -2485,18 +2485,18 @@ const styles = {
     gap: '10px',
     flexShrink: 0
   },
- // Update the main content layout styles:
+ // Update these styles in the styles object:
 
 mainContentArea: {
   display: 'flex',
   flex: 1,
   overflow: 'hidden',
-  gap: '20px',
-  height: 'calc(100vh - 280px)' // Adjusted height calculation
+  gap: '10px', // Reduced gap for more space
+  height: 'calc(100vh - 150px)' // Much less top spacing
 },
 
 leftColumn: {
-  flex: 4, // Increased from 3 to give more space to iframe
+  flex: 5, // Much wider - increased from 4
   display: 'flex',
   flexDirection: 'column',
   overflow: 'hidden',
@@ -2507,20 +2507,22 @@ rightColumn: {
   flex: 1,
   background: 'rgba(26, 26, 26, 0.5)',
   borderLeft: '1px solid rgba(66, 133, 244, 0.1)',
-  padding: '20px',
+  padding: '15px',
   overflow: 'auto',
-  minWidth: '300px',
-  maxWidth: '400px' // Limit right column width
+  minWidth: '250px', // Much narrower
+  maxWidth: '300px'
 },
 
 iframeContainer: {
-  flex: 3, // Give iframe more vertical space
+  flex: 1, // Take all available space
   position: 'relative',
   overflow: 'hidden',
-  minHeight: '500px', // Increased minimum height
-  borderRadius: '12px',
-  border: '1px solid rgba(66, 133, 244, 0.3)',
-  boxShadow: '0 10px 30px rgba(0, 0, 0, 0.3)'
+  minHeight: '700px', // Very tall
+  maxHeight: '85vh', // Most of the viewport
+  borderRadius: '15px',
+  border: '3px solid rgba(66, 133, 244, 0.4)', // Thick glowing border
+  boxShadow: '0 0 50px rgba(66, 133, 244, 0.3), 0 20px 60px rgba(0, 0, 0, 0.5)', // Glowing effect
+  marginBottom: '15px'
 },
 
 serverIframe: {
@@ -2528,18 +2530,61 @@ serverIframe: {
   height: '100%',
   border: 'none',
   background: 'white',
-  borderRadius: '12px'
+  borderRadius: '12px',
+  transform: 'scale(1.02)', // Slightly zoomed
+  transformOrigin: 'center center'
 },
 
 fileList: {
-  flex: 1, // Takes remaining space after iframe
   background: 'rgba(26, 26, 26, 0.8)',
   border: '1px solid rgba(66, 133, 244, 0.2)',
   borderRadius: '12px',
-  padding: '20px',
+  padding: '15px',
   overflowY: 'auto',
-  minHeight: '200px',
-  marginTop: '20px' // Add some spacing from iframe
+  height: '30vh', // Fixed height, not competing with iframe
+  maxHeight: '30vh',
+  flexShrink: 0 // Don't shrink
+},
+
+// Make header much more compact:
+serverHeader: {
+  background: 'rgba(26, 26, 26, 0.95)',
+  backdropFilter: 'blur(10px)',
+  padding: '10px 20px', // Minimal padding
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  borderBottom: '1px solid rgba(66, 133, 244, 0.2)',
+  flexShrink: 0,
+  minHeight: '60px' // Fixed small height
+},
+
+// Reduce warning box size:
+warningBox: {
+  background: 'rgba(220, 53, 69, 0.1)',
+  color: '#ff6b6b',
+  padding: '8px 20px',
+  textAlign: 'center',
+  fontSize: '12px',
+  fontWeight: '600',
+  borderBottom: '1px solid rgba(220, 53, 69, 0.2)',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: '8px',
+  flexShrink: 0,
+  minHeight: '40px'
+},
+
+// Update serverView to maximize space:
+serverView: {
+  height: 'calc(100vh - 100px)', // Taller
+  display: 'flex',
+  flexDirection: 'column',
+  background: 'rgba(255,255,255,0.02)',
+  borderRadius: '20px',
+  overflow: 'hidden',
+  border: '1px solid rgba(66, 133, 244, 0.1)'
 },
   fileListTitle: {
     margin: '0 0 15px 0',
