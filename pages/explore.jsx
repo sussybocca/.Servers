@@ -1,4 +1,4 @@
- 'use client';
+'use client';
 
 import { useEffect, useState, useRef } from 'react';
 import Head from 'next/head';
@@ -29,6 +29,11 @@ export default function ExplorePage() {
   const [commentError, setCommentError] = useState('');
   const [showImmersiveView, setShowImmersiveView] = useState(false);
   const [immersiveLoading, setImmersiveLoading] = useState(false);
+  // NEW: fullscreen mode for server view
+  const [fullscreenMode, setFullscreenMode] = useState(false);
+  // NEW: toggle HTML overlay in immersive view
+  const [showHtmlInImmersive, setShowHtmlInImmersive] = useState(true);
+  
   const warningAccepted = useRef(false);
   
   // Three.js refs
@@ -526,6 +531,8 @@ export default function ExplorePage() {
   setShowCommentForm(false);
   setNewComment('');
   setShowImmersiveView(false);
+  // NEW: reset fullscreen mode when entering a new server
+  setFullscreenMode(false);
   
   try {
     // Load comprehensive server data including files
@@ -783,7 +790,7 @@ export default function ExplorePage() {
             .stat {
               background: rgba(255,255,255,0.15);
               padding: 10px 20px;
-              border-radius: 10px;
+              borderRadius: 10px;
               min-width: 120px;
             }
           </style>
@@ -989,7 +996,7 @@ export default function ExplorePage() {
         </div>
       );
     }
-  }); // <-- THIS CLOSING PARENTHESIS WAS MISSING
+  });
 };
   const postComment = async () => {
     if (!newComment.trim()) {
@@ -1119,6 +1126,8 @@ export default function ExplorePage() {
     setNewComment('');
     setCommentError('');
     setShowImmersiveView(false);
+    // NEW: reset fullscreen mode when leaving server
+    setFullscreenMode(false);
   };
 
   const logout = () => {
@@ -1241,9 +1250,10 @@ export default function ExplorePage() {
     </motion.div>
   );
 
+  // NEW: updated immersive view with HTML overlay
   const renderImmersiveView = () => (
     <motion.div 
-      style={styles.immersiveView}
+      style={{...styles.immersiveView, position: 'relative'}}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -1295,10 +1305,47 @@ export default function ExplorePage() {
           </motion.h3>
         </div>
       ) : (
-        <div 
-          ref={threeContainerRef} 
-          style={styles.threeContainer}
-        />
+        <>
+          <div 
+            ref={threeContainerRef} 
+            style={styles.threeContainer}
+          />
+          {/* NEW: HTML overlay in immersive view */}
+          {showHtmlInImmersive && (
+            <motion.div
+              style={styles.immersiveIframeOverlay}
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              <div style={styles.immersiveIframeHeader}>
+                <span>🌐 Server HTML Preview</span>
+                <motion.button
+                  style={styles.immersiveIframeClose}
+                  onClick={() => setShowHtmlInImmersive(false)}
+                  whileHover={{ scale: 1.1 }}
+                >
+                  ✕
+                </motion.button>
+              </div>
+              <iframe
+                srcDoc={serverContent}
+                style={styles.immersiveIframe}
+                title="Immersive Server Content"
+                sandbox="allow-scripts allow-same-origin"
+              />
+            </motion.div>
+          )}
+          {!showHtmlInImmersive && (
+            <motion.button
+              style={styles.showHtmlButton}
+              onClick={() => setShowHtmlInImmersive(true)}
+              whileHover={{ scale: 1.05 }}
+            >
+              Show HTML
+            </motion.button>
+          )}
+        </>
       )}
 
       <div style={styles.immersiveInfo}>
@@ -1537,6 +1584,7 @@ export default function ExplorePage() {
     </motion.div>
   );
 
+  // NEW: server view with fullscreen mode support
   const renderServerView = () => {
     const currentServer = servers.find(s => s.id === selectedServer);
     
@@ -1546,7 +1594,7 @@ export default function ExplorePage() {
         initial={{ opacity: 0, x: -50 }}
         animate={{ opacity: 1, x: 0 }}
         exit={{ opacity: 0, x: 50 }}
-        style={styles.serverView}
+        style={fullscreenMode ? styles.serverViewFullscreen : styles.serverView}
       >
         <motion.div 
           style={styles.serverHeader}
@@ -1611,6 +1659,16 @@ export default function ExplorePage() {
               🚀 Enter 3D Immersive View
             </motion.button>
             
+            {/* NEW: Fullscreen toggle button */}
+            <motion.button
+              style={styles.fullscreenToggleButton}
+              onClick={() => setFullscreenMode(!fullscreenMode)}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+            >
+              {fullscreenMode ? '🔲 Exit Fullscreen' : '🖥️ Fullscreen'}
+            </motion.button>
+            
             <motion.div 
               style={styles.serverStats}
               initial={{ opacity: 0 }}
@@ -1662,7 +1720,7 @@ export default function ExplorePage() {
         </motion.div>
 
         <motion.div 
-          style={styles.warningBox}
+          style={fullscreenMode ? styles.warningBoxFullscreen : styles.warningBox}
           initial={{ y: -50, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.1 }}
@@ -1677,74 +1735,97 @@ export default function ExplorePage() {
           {!user && ' (Log in to comment or download files)'}
         </motion.div>
 
-        <div style={styles.mainContentArea}>
-          <div style={styles.leftColumn}>
-            <div style={styles.iframeContainer}>
+        {fullscreenMode ? (
+          // NEW: fullscreen iframe only
+          <div style={styles.fullscreenContentArea}>
+            <div style={styles.fullscreenIframeContainer}>
               {loadingServer ? (
-                <motion.div 
-                  style={styles.loadingContainer}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                >
-                  <motion.div
-                    style={styles.spinner}
-                    animate={{ rotate: 360 }}
-                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                  >
-                    <div style={styles.spinnerInner} />
-                  </motion.div>
-                  <motion.h3
-                    style={styles.loadingText}
-                    animate={{ opacity: [0.5, 1, 0.5] }}
-                    transition={{ duration: 2, repeat: Infinity }}
-                  >
-                    Loading server...
-                  </motion.h3>
+                <motion.div style={styles.loadingContainer}>
+                  <motion.div style={styles.spinner} animate={{ rotate: 360 }} />
+                  <motion.h3 style={styles.loadingText}>Loading server...</motion.h3>
                 </motion.div>
               ) : (
-                <motion.div
-                  style={styles.iframeWrapper}
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: 0.2 }}
-                >
-                  <iframe
-                    key={iframeKey}
-                    srcDoc={serverContent}
-                    style={styles.serverIframe}
-                    title="Server Content"
-                    sandbox="allow-scripts allow-same-origin"
-                  />
-                </motion.div>
+                <iframe
+                  key={iframeKey}
+                  srcDoc={serverContent}
+                  style={styles.fullscreenIframe}
+                  title="Server Content Fullscreen"
+                  sandbox="allow-scripts allow-same-origin"
+                />
               )}
             </div>
-
-            <motion.div 
-              style={styles.fileList}
-              initial={{ y: 50, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: 0.3 }}
-            >
-              <motion.h4 
-                style={styles.fileListTitle}
-                whileHover={{ x: 5 }}
-              >
-                📁 Server Files ({serverFiles.length})
-                {serverFiles.length > 0 && (
-                  <span style={styles.fileListHint}> (Click any file to preview)</span>
+          </div>
+        ) : (
+          // Original layout with file list and right column
+          <div style={styles.mainContentArea}>
+            <div style={styles.leftColumn}>
+              <div style={styles.iframeContainer}>
+                {loadingServer ? (
+                  <motion.div 
+                    style={styles.loadingContainer}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                  >
+                    <motion.div
+                      style={styles.spinner}
+                      animate={{ rotate: 360 }}
+                      transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                    >
+                      <div style={styles.spinnerInner} />
+                    </motion.div>
+                    <motion.h3
+                      style={styles.loadingText}
+                      animate={{ opacity: [0.5, 1, 0.5] }}
+                      transition={{ duration: 2, repeat: Infinity }}
+                    >
+                      Loading server...
+                    </motion.h3>
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    style={styles.iframeWrapper}
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.2 }}
+                  >
+                    <iframe
+                      key={iframeKey}
+                      srcDoc={serverContent}
+                      style={styles.serverIframe}
+                      title="Server Content"
+                      sandbox="allow-scripts allow-same-origin"
+                    />
+                  </motion.div>
                 )}
-              </motion.h4>
-              <div style={styles.fileTree}>
-                {renderFileTree(fileTree)}
               </div>
-            </motion.div>
-          </div>
 
-          <div style={styles.rightColumn}>
-            {serverVersions.length > 0 && renderVersionsSection()}
-            {renderCommentsSection()}
+              <motion.div 
+                style={styles.fileList}
+                initial={{ y: 50, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: 0.3 }}
+              >
+                <motion.h4 
+                  style={styles.fileListTitle}
+                  whileHover={{ x: 5 }}
+                >
+                  📁 Server Files ({serverFiles.length})
+                  {serverFiles.length > 0 && (
+                    <span style={styles.fileListHint}> (Click any file to preview)</span>
+                  )}
+                </motion.h4>
+                <div style={styles.fileTree}>
+                  {renderFileTree(fileTree)}
+                </div>
+              </motion.div>
+            </div>
+
+            <div style={styles.rightColumn}>
+              {serverVersions.length > 0 && renderVersionsSection()}
+              {renderCommentsSection()}
+            </div>
           </div>
-        </div>
+        )}
 
         <AnimatePresence>
           {selectedFile && renderFilePreview()}
@@ -2351,15 +2432,26 @@ const styles = {
     overflow: 'hidden',
     border: '1px solid rgba(66, 133, 244, 0.1)'
   },
+  // NEW: fullscreen variant
+  serverViewFullscreen: {
+    height: 'calc(100vh - 100px)',
+    display: 'flex',
+    flexDirection: 'column',
+    background: 'rgba(255,255,255,0.02)',
+    borderRadius: '20px',
+    overflow: 'hidden',
+    border: '1px solid rgba(66, 133, 244, 0.1)'
+  },
   serverHeader: {
-    background: 'rgba(26, 26, 26, 0.9)',
+    background: 'rgba(26, 26, 26, 0.95)',
     backdropFilter: 'blur(10px)',
-    padding: '20px 30px',
+    padding: '10px 20px',
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
     borderBottom: '1px solid rgba(66, 133, 244, 0.2)',
-    flexShrink: 0
+    flexShrink: 0,
+    minHeight: '60px'
   },
   headerLeft: {
     display: 'flex',
@@ -2401,6 +2493,22 @@ const styles = {
     gap: '10px',
     transition: 'all 0.3s ease',
     boxShadow: '0 0 15px rgba(66, 133, 244, 0.3)'
+  },
+  // NEW: fullscreen toggle button style
+  fullscreenToggleButton: {
+    background: 'rgba(66, 133, 244, 0.15)',
+    color: '#8ab4f8',
+    border: '2px solid rgba(66, 133, 244, 0.3)',
+    padding: '10px 20px',
+    borderRadius: '25px',
+    cursor: 'pointer',
+    fontWeight: '600',
+    fontSize: '14px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    transition: 'all 0.2s ease',
+    flexShrink: 0
   },
   serverInfo: {
     flex: 1
@@ -2474,118 +2582,87 @@ const styles = {
   warningBox: {
     background: 'rgba(220, 53, 69, 0.1)',
     color: '#ff6b6b',
-    padding: '12px 30px',
+    padding: '8px 20px',
     textAlign: 'center',
-    fontSize: '14px',
+    fontSize: '12px',
     fontWeight: '600',
     borderBottom: '1px solid rgba(220, 53, 69, 0.2)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: '8px',
+    flexShrink: 0,
+    minHeight: '40px'
+  },
+  // NEW: warning box for fullscreen (same style)
+  warningBoxFullscreen: {
+    background: 'rgba(220, 53, 69, 0.1)',
+    color: '#ff6b6b',
+    padding: '8px 20px',
+    textAlign: 'center',
+    fontSize: '12px',
+    fontWeight: '600',
+    borderBottom: '1px solid rgba(220, 53, 69, 0.2)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    flexShrink: 0,
+    minHeight: '40px'
+  },
+  mainContentArea: {
+    display: 'flex',
+    flex: 1,
+    overflow: 'hidden',
     gap: '10px',
+    height: 'calc(100vh - 150px)'
+  },
+  leftColumn: {
+    flex: 5,
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
+    minWidth: '0'
+  },
+  rightColumn: {
+    flex: 1,
+    background: 'rgba(26, 26, 26, 0.5)',
+    borderLeft: '1px solid rgba(66, 133, 244, 0.1)',
+    padding: '15px',
+    overflow: 'auto',
+    minWidth: '250px',
+    maxWidth: '300px'
+  },
+  iframeContainer: {
+    flex: 1,
+    position: 'relative',
+    overflow: 'hidden',
+    minHeight: '700px',
+    maxHeight: '85vh',
+    borderRadius: '15px',
+    border: '3px solid rgba(66, 133, 244, 0.4)',
+    boxShadow: '0 0 50px rgba(66, 133, 244, 0.3), 0 20px 60px rgba(0, 0, 0, 0.5)',
+    marginBottom: '15px'
+  },
+  serverIframe: {
+    width: '100%',
+    height: '100%',
+    border: 'none',
+    background: 'white',
+    borderRadius: '12px',
+    transform: 'scale(1.02)',
+    transformOrigin: 'center center'
+  },
+  fileList: {
+    background: 'rgba(26, 26, 26, 0.8)',
+    border: '1px solid rgba(66, 133, 244, 0.2)',
+    borderRadius: '12px',
+    padding: '15px',
+    overflowY: 'auto',
+    height: '30vh',
+    maxHeight: '30vh',
     flexShrink: 0
   },
- // Update these styles in the styles object:
-
-mainContentArea: {
-  display: 'flex',
-  flex: 1,
-  overflow: 'hidden',
-  gap: '10px', // Reduced gap for more space
-  height: 'calc(100vh - 150px)' // Much less top spacing
-},
-
-leftColumn: {
-  flex: 5, // Much wider - increased from 4
-  display: 'flex',
-  flexDirection: 'column',
-  overflow: 'hidden',
-  minWidth: '0'
-},
-
-rightColumn: {
-  flex: 1,
-  background: 'rgba(26, 26, 26, 0.5)',
-  borderLeft: '1px solid rgba(66, 133, 244, 0.1)',
-  padding: '15px',
-  overflow: 'auto',
-  minWidth: '250px', // Much narrower
-  maxWidth: '300px'
-},
-
-iframeContainer: {
-  flex: 1, // Take all available space
-  position: 'relative',
-  overflow: 'hidden',
-  minHeight: '700px', // Very tall
-  maxHeight: '85vh', // Most of the viewport
-  borderRadius: '15px',
-  border: '3px solid rgba(66, 133, 244, 0.4)', // Thick glowing border
-  boxShadow: '0 0 50px rgba(66, 133, 244, 0.3), 0 20px 60px rgba(0, 0, 0, 0.5)', // Glowing effect
-  marginBottom: '15px'
-},
-
-serverIframe: {
-  width: '100%',
-  height: '100%',
-  border: 'none',
-  background: 'white',
-  borderRadius: '12px',
-  transform: 'scale(1.02)', // Slightly zoomed
-  transformOrigin: 'center center'
-},
-
-fileList: {
-  background: 'rgba(26, 26, 26, 0.8)',
-  border: '1px solid rgba(66, 133, 244, 0.2)',
-  borderRadius: '12px',
-  padding: '15px',
-  overflowY: 'auto',
-  height: '30vh', // Fixed height, not competing with iframe
-  maxHeight: '30vh',
-  flexShrink: 0 // Don't shrink
-},
-
-// Make header much more compact:
-serverHeader: {
-  background: 'rgba(26, 26, 26, 0.95)',
-  backdropFilter: 'blur(10px)',
-  padding: '10px 20px', // Minimal padding
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  borderBottom: '1px solid rgba(66, 133, 244, 0.2)',
-  flexShrink: 0,
-  minHeight: '60px' // Fixed small height
-},
-
-// Reduce warning box size:
-warningBox: {
-  background: 'rgba(220, 53, 69, 0.1)',
-  color: '#ff6b6b',
-  padding: '8px 20px',
-  textAlign: 'center',
-  fontSize: '12px',
-  fontWeight: '600',
-  borderBottom: '1px solid rgba(220, 53, 69, 0.2)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  gap: '8px',
-  flexShrink: 0,
-  minHeight: '40px'
-},
-
-// Update serverView to maximize space:
-serverView: {
-  height: 'calc(100vh - 100px)', // Taller
-  display: 'flex',
-  flexDirection: 'column',
-  background: 'rgba(255,255,255,0.02)',
-  borderRadius: '20px',
-  overflow: 'hidden',
-  border: '1px solid rgba(66, 133, 244, 0.1)'
-},
   fileListTitle: {
     margin: '0 0 15px 0',
     fontSize: '16px',
@@ -2757,6 +2834,66 @@ serverView: {
     position: 'relative',
     overflow: 'hidden'
   },
+  // NEW: immersive HTML overlay styles
+  immersiveIframeOverlay: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    transform: 'translate(-50%, -50%)',
+    width: '80%',
+    height: '80%',
+    background: 'rgba(20, 20, 20, 0.9)',
+    backdropFilter: 'blur(10px)',
+    borderRadius: '20px',
+    border: '2px solid rgba(66, 133, 244, 0.5)',
+    boxShadow: '0 0 40px rgba(0,0,0,0.7)',
+    zIndex: 1002,
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden'
+  },
+  immersiveIframeHeader: {
+    padding: '10px 20px',
+    background: 'rgba(0,0,0,0.5)',
+    color: 'white',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderBottom: '1px solid rgba(255,255,255,0.2)'
+  },
+  immersiveIframeClose: {
+    background: 'rgba(220,53,69,0.3)',
+    border: 'none',
+    color: '#ff6b6b',
+    width: '30px',
+    height: '30px',
+    borderRadius: '50%',
+    cursor: 'pointer',
+    fontSize: '16px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  immersiveIframe: {
+    width: '100%',
+    flex: 1,
+    border: 'none',
+    background: 'white'
+  },
+  showHtmlButton: {
+    position: 'absolute',
+    bottom: '100px',
+    right: '40px',
+    background: 'linear-gradient(90deg, #4285f4, #34a853)',
+    color: 'white',
+    border: 'none',
+    padding: '12px 24px',
+    borderRadius: '30px',
+    cursor: 'pointer',
+    fontWeight: 'bold',
+    zIndex: 1002,
+    boxShadow: '0 0 20px rgba(66,133,244,0.5)'
+  },
   immersiveInfo: {
     background: 'rgba(10, 10, 10, 0.95)',
     backdropFilter: 'blur(10px)',
@@ -2846,6 +2983,29 @@ serverView: {
     color: '#ccc',
     fontSize: '14px',
     fontWeight: '500'
+  },
+  // NEW: fullscreen content area
+  fullscreenContentArea: {
+    flex: 1,
+    display: 'flex',
+    overflow: 'hidden',
+    height: 'calc(100vh - 140px)',
+    padding: '20px',
+    boxSizing: 'border-box'
+  },
+  fullscreenIframeContainer: {
+    width: '100%',
+    height: '100%',
+    borderRadius: '15px',
+    border: '3px solid rgba(66, 133, 244, 0.4)',
+    boxShadow: '0 0 50px rgba(66, 133, 244, 0.3)',
+    overflow: 'hidden'
+  },
+  fullscreenIframe: {
+    width: '100%',
+    height: '100%',
+    border: 'none',
+    background: 'white'
   },
   // Versions Section
   versionsSection: {
